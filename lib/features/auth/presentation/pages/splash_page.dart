@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:jwt_decode/jwt_decode.dart';
 import '../../../../injection_container.dart';
 import '../../../../core/routes/app_router.dart';
+import '../../../../core/services/notification_service.dart';
 
 // ─── Palette Yobante Boutique ───────────────────────────────────────────────────
 class _C {
@@ -110,6 +111,8 @@ class _SplashPageState extends State<SplashPage> with TickerProviderStateMixin {
     if (token != null && token.isNotEmpty) {
       try {
         if (!Jwt.isExpired(token)) {
+          // Session restaurée : le suivi des notifications reprend.
+          sl<NotificationService>().demarrer();
           final payload = Jwt.parseJwt(token);
           Navigator.of(context).pushReplacementNamed(
             AppRouter.routeSelonRole(payload['role']?.toString()),

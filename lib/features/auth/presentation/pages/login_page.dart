@@ -10,6 +10,8 @@ import '../bloc/auth_bloc.dart';
 import '../bloc/auth_event.dart';
 import '../bloc/auth_state.dart';
 import '../widgets/PasswordTextField.dart';
+import '../../../../core/services/notification_service.dart';
+import '../../../../injection_container.dart';
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
 class _C {
@@ -122,6 +124,9 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         listener: (context, state) {
           if (state is AuthSuccess) {
             final user = state.user;
+
+            // Le compte est connu : on peut suivre ses notifications.
+            sl<NotificationService>().demarrer();
 
             // Le rôle détermine l'interface : un vendeur arrive sur son espace,
             // les autres sur la boutique. Les admins gèrent la boutique depuis

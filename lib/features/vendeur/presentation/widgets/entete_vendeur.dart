@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../../../injection_container.dart';
 import '../../../../core/services/token_service.dart';
+import '../../../../core/widgets/cloche_notifications.dart';
 import '../../../auth/domain/entities/user.dart';
 import '../../../compte/presentation/bloc/compte_bloc.dart';
 import '../../../compte/presentation/bloc/compte_event.dart';
@@ -93,8 +94,7 @@ class _EnteteVendeurState extends State<EnteteVendeur> {
                 fit: BoxFit.contain,
               ),
               const Spacer(),
-              _icone(
-                icone: Icons.notifications_none_rounded,
+              ClocheNotifications(
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => const NotificationsPage()),
                 ),

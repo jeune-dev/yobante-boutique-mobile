@@ -3,6 +3,8 @@
          (API, Socket.IO, images Cloudinary) en dehors des builds debug/profile,
          qui héritent cette permission d'un manifeste séparé fourni par Flutter. -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Requise depuis Android 13 pour afficher la moindre notification. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <!-- Localisation : utilisée par la fonctionnalité « Boutiques proches ». -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>

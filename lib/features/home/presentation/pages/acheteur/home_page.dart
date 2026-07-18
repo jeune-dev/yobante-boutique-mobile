@@ -34,6 +34,7 @@ import '../../../../auth/presentation/pages/login_page.dart';
 import '../../../../compte/presentation/bloc/compte_bloc.dart';
 import '../../../../compte/presentation/bloc/compte_event.dart';
 import '../../../../compte/presentation/bloc/compte_state.dart';
+import '../../../../../core/widgets/cloche_notifications.dart';
 import 'dart:async';
 
 
@@ -340,9 +341,10 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                 fit: BoxFit.contain,
               ),
               const Spacer(),
-              // ── Cloche notifications
-              _buildTopIcon(
-                icon: Icons.notifications_none_rounded,
+              // ── Cloche notifications, avec le nombre de non-lues
+              ClocheNotifications(
+                couleurIcone: _C.green,
+                couleurFond: _C.bg,
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => const NotificationsPage()),
                 ),
