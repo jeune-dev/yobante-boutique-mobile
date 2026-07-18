@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../../../../injection_container.dart';
+import '../../../auth/domain/entities/user.dart';
 import '../../data/models/vendeur_ventes_model.dart';
 import '../../domain/usecases/get_vendeur_tableau_bord.dart';
+import '../widgets/entete_vendeur.dart';
 import '../widgets/statut_chip.dart';
 
 /// Accueil vendeur : vision synthétique des ventes et de l'état du catalogue.
@@ -11,8 +13,8 @@ import '../widgets/statut_chip.dart';
 /// catalogue de `GET /vendeur/produits/stats`. Les deux appels sont
 /// indépendants : si l'un échoue, l'autre reste affiché.
 class VendeurAccueilPage extends StatefulWidget {
-  final String? prenom;
-  const VendeurAccueilPage({super.key, this.prenom});
+  final User? user;
+  const VendeurAccueilPage({super.key, this.user});
 
   @override
   State<VendeurAccueilPage> createState() => _VendeurAccueilPageState();
@@ -66,65 +68,44 @@ class _VendeurAccueilPageState extends State<VendeurAccueilPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: VendeurCouleurs.fond,
-      body: SafeArea(
-        bottom: false,
-        child: RefreshIndicator(
-          onRefresh: _charger,
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 110),
-            children: [
-              _entete(),
-              const SizedBox(height: 18),
-              if (_chargement)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 60),
-                  child: Center(child: CircularProgressIndicator()),
-                )
-              else ...[
-                if (_erreur != null) _bandeauErreur(_erreur!),
-                _carteChiffreAffaires(),
-                const SizedBox(height: 14),
-                _tuilesVentes(),
-                const SizedBox(height: 22),
-                _titre('Ventes des ${_ventes.periode.jours} derniers jours'),
-                const SizedBox(height: 12),
-                _graphique(),
-                const SizedBox(height: 22),
-                _titre('Meilleures ventes'),
-                const SizedBox(height: 12),
-                _topProduits(),
-                const SizedBox(height: 22),
-                _titre('Mon catalogue'),
-                const SizedBox(height: 12),
-                _catalogue(),
-              ],
-            ],
+      body: Column(
+        children: [
+          EnteteVendeur(user: widget.user),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: _charger,
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 110),
+                children: [
+                  if (_chargement)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 60),
+                      child: Center(child: CircularProgressIndicator()),
+                    )
+                  else ...[
+                    if (_erreur != null) _bandeauErreur(_erreur!),
+                    _carteChiffreAffaires(),
+                    const SizedBox(height: 14),
+                    _tuilesVentes(),
+                    const SizedBox(height: 22),
+                    _titre('Ventes des ${_ventes.periode.jours} derniers jours'),
+                    const SizedBox(height: 12),
+                    _graphique(),
+                    const SizedBox(height: 22),
+                    _titre('Meilleures ventes'),
+                    const SizedBox(height: 12),
+                    _topProduits(),
+                    const SizedBox(height: 22),
+                    _titre('Mon catalogue'),
+                    const SizedBox(height: 12),
+                    _catalogue(),
+                  ],
+                ],
+              ),
+            ),
           ),
-        ),
+        ],
       ),
-    );
-  }
-
-  // ── Entête ────────────────────────────────────────────────────────────
-  Widget _entete() {
-    final prenom = widget.prenom?.trim();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          prenom == null || prenom.isEmpty ? 'Bonjour' : 'Bonjour $prenom',
-          style: const TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.w800,
-            color: VendeurCouleurs.noir,
-          ),
-        ),
-        const SizedBox(height: 2),
-        const Text(
-          'Voici l\'activité de votre boutique',
-          style: TextStyle(fontSize: 13.5, color: VendeurCouleurs.gris),
-        ),
-      ],
     );
   }
 

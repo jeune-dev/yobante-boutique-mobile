@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:yobante/features/auth/domain/entities/user.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'profil_page.dart';
 import '../../../../vendeur/presentation/pages/vendeur_accueil_page.dart';
 import '../../../../vendeur/presentation/pages/vendeur_commandes_page.dart';
 import '../../../../vendeur/presentation/pages/mes_produits_page.dart';
@@ -72,11 +71,8 @@ class _MainVendeurPageState extends State<MainVendeurPage>
       activeIcon: Icons.add_box_rounded,
       label: 'Demande',
     ),
-    _NavItem(
-      icon: Icons.person_outline_rounded,
-      activeIcon: Icons.person_rounded,
-      label: 'Profil',
-    ),
+    // Le profil n'est plus un onglet : il s'ouvre depuis l'avatar de l'entête,
+    // comme dans l'interface client.
   ];
 
   late List<Widget> _pages;
@@ -86,11 +82,10 @@ class _MainVendeurPageState extends State<MainVendeurPage>
     super.initState();
 
     _pages = [
-      VendeurAccueilPage(prenom: widget.user?.prenom),
+      VendeurAccueilPage(user: widget.user),
       const VendeurCommandesPage(),
       const MesProduitsPage(),
       const DemandePublicationPage(),
-      ProfilPage(user: widget.user),
     ];
 
     _itemCtrl = List.generate(
