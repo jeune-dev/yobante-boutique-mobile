@@ -54,12 +54,10 @@ class CommandeEndpoints {
   CommandeEndpoints._();
 
   static const commandes = '/commandes';
-  static const commandesVendeur = '/commandes/vendeur';
   static String commande(String id) => '/commandes/$id';
   static String annuler(String id) => '/commandes/$id/annuler';
   static String payer(String id) => '/commandes/$id/payer';
-  static String statut(String id) => '/commandes/$id/statut';
-  static String demandeRetour(String id) => '/commandes/$id/demande-retour';
+  static String paiement(String id) => '/commandes/$id/paiement';
 }
 
 /// Gestion des produits côté vendeur (feature `vendeur`).
@@ -81,6 +79,9 @@ class CompteEndpoints {
 
   static const me = '/profile';
   static const modifierProfil = '/profile';
+  static const adresses = '/profile/adresses';
+  static String adresse(String id) => '/profile/adresses/$id';
+  static String adresseParDefaut(String id) => '/profile/adresses/$id/default';
   static const changePassword = '/auth/change-password';
   static const forgotPassword = '/auth/forgot-password';
   static const resetPassword = '/auth/reset-password';

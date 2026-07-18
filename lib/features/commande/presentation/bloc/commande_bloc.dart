@@ -9,12 +9,10 @@ class CommandeBloc extends Bloc<CommandeEvent, CommandeState> {
 
   CommandeBloc(this.repository) : super(CommandeInitial()) {
     on<LoadMesCommandes>(_onLoadMesCommandes);
-    on<LoadCommandesVendeur>(_onLoadCommandesVendeur);
     on<CreerCommande>(_onCreerCommande);
     on<PayerCommande>(_onPayerCommande);
+    on<VerifierPaiement>(_onVerifierPaiement);
     on<AnnulerCommande>(_onAnnulerCommande);
-    on<ChangerStatutCommande>(_onChangerStatut);
-    on<DemanderRetourCommande>(_onDemanderRetour);
   }
 
   // Extrait un message d'erreur lisible (priorité au message du backend)
@@ -38,27 +36,13 @@ class CommandeBloc extends Bloc<CommandeEvent, CommandeState> {
     }
   }
 
-  Future<void> _onLoadCommandesVendeur(
-      LoadCommandesVendeur event, Emitter<CommandeState> emit) async {
-    emit(CommandeLoading());
-    try {
-      final list = await repository.commandesVendeur(statut: event.statut);
-      emit(CommandesLoaded(list));
-    } catch (e) {
-      emit(CommandeError(_msg(e)));
-    }
-  }
-
   Future<void> _onCreerCommande(
       CreerCommande event, Emitter<CommandeState> emit) async {
     emit(CommandeLoading());
     try {
       final commande = await repository.creerCommande(
-        items: event.items,
-        modeLivraison: event.modeLivraison,
-        modePaiement: event.modePaiement,
-        adresseLivraison: event.adresseLivraison,
-        numeroTelephone: event.numeroTelephone,
+        adresseId: event.adresseId,
+        methode: event.methode,
         note: event.note,
       );
       emit(CommandeCreee(commande));
@@ -71,12 +55,18 @@ class CommandeBloc extends Bloc<CommandeEvent, CommandeState> {
       PayerCommande event, Emitter<CommandeState> emit) async {
     emit(CommandeLoading());
     try {
-      final url = await repository.payer(
-        event.commandeId,
-        methode: event.methode,
-        numeroTelephone: event.numeroTelephone,
-      );
-      emit(PaiementInitie(event.commandeId, url));
+      final paiement = await repository.payer(event.commandeId);
+      emit(PaiementInitie(event.commandeId, paiement));
+    } catch (e) {
+      emit(CommandeError(_msg(e)));
+    }
+  }
+
+  Future<void> _onVerifierPaiement(
+      VerifierPaiement event, Emitter<CommandeState> emit) async {
+    try {
+      final paiement = await repository.statutPaiement(event.commandeId);
+      emit(PaiementStatut(paiement));
     } catch (e) {
       emit(CommandeError(_msg(e)));
     }
@@ -88,28 +78,6 @@ class CommandeBloc extends Bloc<CommandeEvent, CommandeState> {
     try {
       final commande = await repository.annuler(event.commandeId);
       emit(CommandeMiseAJour(commande));
-    } catch (e) {
-      emit(CommandeError(_msg(e)));
-    }
-  }
-
-  Future<void> _onChangerStatut(
-      ChangerStatutCommande event, Emitter<CommandeState> emit) async {
-    emit(CommandeLoading());
-    try {
-      final commande = await repository.changerStatut(event.commandeId, event.statut);
-      emit(CommandeMiseAJour(commande));
-    } catch (e) {
-      emit(CommandeError(_msg(e)));
-    }
-  }
-
-  Future<void> _onDemanderRetour(
-      DemanderRetourCommande event, Emitter<CommandeState> emit) async {
-    emit(CommandeLoading());
-    try {
-      await repository.demandeRetour(event.commandeId, raison: event.raison);
-      emit(RetourDemande(event.commandeId));
     } catch (e) {
       emit(CommandeError(_msg(e)));
     }

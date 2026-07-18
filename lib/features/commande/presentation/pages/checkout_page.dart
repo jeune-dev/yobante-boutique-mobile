@@ -3,6 +3,9 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../../injection_container.dart';
 import '../../../../core/routes/app_router.dart';
+import '../../data/models/adresse_model.dart';
+import '../../data/models/paiement_model.dart';
+import '../../data/repositories/commande_repository.dart';
 import '../../data/services/panier_service.dart';
 import '../bloc/commande_bloc.dart';
 import '../bloc/commande_event.dart';
@@ -38,48 +41,96 @@ class _CheckoutView extends StatefulWidget {
   State<_CheckoutView> createState() => _CheckoutViewState();
 }
 
+/// Méthodes de règlement acceptées par le backend.
+const _methodes = <String, String>{
+  'wave': 'Wave',
+  'orange_money': 'Orange Money',
+  'carte': 'Carte bancaire',
+  'cash_livraison': 'À la livraison',
+};
+
 class _CheckoutViewState extends State<_CheckoutView> {
   final _formKey = GlobalKey<FormState>();
-  final _adresseCtrl = TextEditingController();
-  final _telCtrl = TextEditingController();
   final _noteCtrl = TextEditingController();
 
-  String _modeLivraison = 'livraison';
-  String _modePaiement = 'en_ligne';
-  String _methode = 'orange_money';
+  String _methode = 'cash_livraison';
+
+  /// La commande référence une adresse enregistrée : on charge celles du
+  /// compte plutôt que de faire saisir du texte libre.
+  List<AdresseModel> _adresses = const [];
+  String? _adresseId;
+  bool _chargementAdresses = true;
+  String? _erreurAdresses;
 
   final _panier = sl<PanierService>();
 
   @override
+  void initState() {
+    super.initState();
+    _chargerAdresses();
+  }
+
+  @override
   void dispose() {
-    _adresseCtrl.dispose();
-    _telCtrl.dispose();
     _noteCtrl.dispose();
     super.dispose();
   }
 
+  Future<void> _chargerAdresses() async {
+    setState(() {
+      _chargementAdresses = true;
+      _erreurAdresses = null;
+    });
+    try {
+      final adresses = await sl<CommandeRepository>().adresses();
+      if (!mounted) return;
+      setState(() {
+        _adresses = adresses;
+        _adresseId = adresses
+            .firstWhere(
+              (a) => a.parDefaut,
+              orElse: () => adresses.isNotEmpty
+                  ? adresses.first
+                  : const AdresseModel(
+                      id: '', nomComplet: '', telephone: '', rue: '', ville: '', pays: ''),
+            )
+            .id;
+        if (_adresseId!.isEmpty) _adresseId = null;
+        _chargementAdresses = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _chargementAdresses = false;
+        _erreurAdresses = e.toString();
+      });
+    }
+  }
+
   void _soumettre(BuildContext context) {
     if (!_formKey.currentState!.validate()) return;
+    if (_adresseId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Ajoutez une adresse de livraison depuis votre profil'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
     context.read<CommandeBloc>().add(CreerCommande(
-          items: widget.vendeurId != null
-              ? _panier.toApiItemsPour(widget.vendeurId!)
-              : _panier.toApiItems(),
-          modeLivraison: _modeLivraison,
-          modePaiement: _modePaiement,
-          adresseLivraison:
-              _modeLivraison == 'livraison' ? _adresseCtrl.text.trim() : null,
-          numeroTelephone: _telCtrl.text.trim(),
+          adresseId: _adresseId!,
+          methode: _methode,
           note: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
         ));
   }
 
-  Future<void> _ouvrirPaiement(String? url) async {
-    if (url != null && url.isNotEmpty) {
-      final uri = Uri.tryParse(url);
-      if (uri != null) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      }
-    }
+  /// Ouvre la page du fournisseur. Au retour, on interroge le serveur : le
+  /// résultat du paiement ne transite jamais par le client.
+  Future<void> _ouvrirPaiement(BuildContext context, PaiementModel paiement) async {
+    final uri = Uri.tryParse(paiement.urlPaiement ?? '');
+    if (uri == null) return;
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
   @override
@@ -99,20 +150,26 @@ class _CheckoutViewState extends State<_CheckoutView> {
               SnackBar(content: Text(state.message), backgroundColor: Colors.red),
             );
           } else if (state is CommandeCreee) {
-            // Paiement à la livraison → terminé. En ligne → on lance le paiement.
-            if (state.commande.modePaiement == 'a_la_livraison') {
-              await _viderPanier();
-              if (context.mounted) _allerMesCommandes(context);
-            } else {
-              context.read<CommandeBloc>().add(
-                    PayerCommande(state.commande.id,
-                        methode: _methode, numeroTelephone: _telCtrl.text.trim()),
-                  );
-            }
+            // La commande existe : on enchaîne sur le règlement, quel que soit
+            // le mode. C'est le serveur qui sait s'il y a une page à ouvrir.
+            context.read<CommandeBloc>().add(PayerCommande(state.commande.id));
           } else if (state is PaiementInitie) {
-            await _ouvrirPaiement(state.paymentUrl);
             await _viderPanier();
-            if (context.mounted) _allerMesCommandes(context);
+            if (state.paiement.demandeUneAction && context.mounted) {
+              await _ouvrirPaiement(context, state.paiement);
+            }
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    state.paiement.demandeUneAction
+                        ? 'Finalisez le paiement puis revenez : le statut se met à jour ici.'
+                        : 'Commande confirmée — réglez à la livraison.',
+                  ),
+                ),
+              );
+              _allerMesCommandes(context);
+            }
           }
         },
         builder: (context, state) {
@@ -124,37 +181,11 @@ class _CheckoutViewState extends State<_CheckoutView> {
               child: ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
-                  _section('Mode de réception'),
-                  _choix(['livraison', 'retrait'], _modeLivraison,
-                      {'livraison': 'Livraison', 'retrait': 'Retrait'},
-                      (v) => setState(() => _modeLivraison = v)),
-                  if (_modeLivraison == 'livraison') ...[
-                    const SizedBox(height: 12),
-                    _input(_adresseCtrl, 'Adresse de livraison',
-                        validator: (v) => (_modeLivraison == 'livraison' &&
-                                (v == null || v.trim().isEmpty))
-                            ? 'Adresse requise'
-                            : null),
-                  ],
-                  const SizedBox(height: 12),
-                  _input(_telCtrl, 'Téléphone',
-                      keyboard: TextInputType.phone,
-                      validator: (v) => (v == null || v.trim().isEmpty)
-                          ? 'Téléphone requis'
-                          : null),
+                  _section('Adresse de livraison'),
+                  _selecteurAdresse(),
                   const SizedBox(height: 20),
-                  _section('Paiement'),
-                  _choix(['en_ligne', 'a_la_livraison'], _modePaiement, {
-                    'en_ligne': 'En ligne',
-                    'a_la_livraison': 'À la livraison'
-                  }, (v) => setState(() => _modePaiement = v)),
-                  if (_modePaiement == 'en_ligne') ...[
-                    const SizedBox(height: 12),
-                    _choix(['orange_money', 'wave'], _methode, {
-                      'orange_money': 'Orange Money',
-                      'wave': 'Wave'
-                    }, (v) => setState(() => _methode = v)),
-                  ],
+                  _section('Mode de règlement'),
+                  _selecteurMethode(),
                   const SizedBox(height: 20),
                   _section('Note (optionnel)'),
                   _input(_noteCtrl, 'Une précision pour le vendeur ?',
@@ -206,6 +237,137 @@ class _CheckoutViewState extends State<_CheckoutView> {
     );
   }
 
+  Widget _selecteurAdresse() {
+    if (_chargementAdresses) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 16),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (_erreurAdresses != null) {
+      return Row(
+        children: [
+          const Expanded(
+            child: Text('Adresses indisponibles',
+                style: TextStyle(color: _C.sub, fontSize: 13)),
+          ),
+          TextButton(onPressed: _chargerAdresses, child: const Text('Réessayer')),
+        ],
+      );
+    }
+    if (_adresses.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: _C.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: _C.border),
+        ),
+        child: const Text(
+          "Aucune adresse enregistrée. Ajoutez-en une depuis votre profil pour "
+          'pouvoir être livré.',
+          style: TextStyle(fontSize: 13, color: _C.sub, height: 1.4),
+        ),
+      );
+    }
+    return Column(
+      children: [
+        for (final adresse in _adresses)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: InkWell(
+              onTap: () => setState(() => _adresseId = adresse.id),
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                padding: const EdgeInsets.all(13),
+                decoration: BoxDecoration(
+                  color: _adresseId == adresse.id
+                      ? _C.green.withValues(alpha: 0.08)
+                      : _C.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: _adresseId == adresse.id ? _C.green : _C.border,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      _adresseId == adresse.id
+                          ? Icons.radio_button_checked
+                          : Icons.radio_button_unchecked,
+                      size: 19,
+                      color: _adresseId == adresse.id ? _C.green : _C.border,
+                    ),
+                    const SizedBox(width: 11),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            adresse.nomComplet,
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w700, fontSize: 13.5, color: _C.black),
+                          ),
+                          Text(
+                            adresse.resume,
+                            style: const TextStyle(fontSize: 12, color: _C.sub),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _selecteurMethode() {
+    return Column(
+      children: [
+        for (final entree in _methodes.entries)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: InkWell(
+              onTap: () => setState(() => _methode = entree.key),
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                padding: const EdgeInsets.all(13),
+                decoration: BoxDecoration(
+                  color: _methode == entree.key
+                      ? _C.green.withValues(alpha: 0.08)
+                      : _C.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: _methode == entree.key ? _C.green : _C.border,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      _methode == entree.key
+                          ? Icons.radio_button_checked
+                          : Icons.radio_button_unchecked,
+                      size: 19,
+                      color: _methode == entree.key ? _C.green : _C.border,
+                    ),
+                    const SizedBox(width: 11),
+                    Text(
+                      entree.value,
+                      style: const TextStyle(
+                          fontSize: 13.5, fontWeight: FontWeight.w600, color: _C.black),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
   Widget _section(String t) => Padding(
         padding: const EdgeInsets.only(bottom: 8),
         child: Text(t,
@@ -244,34 +406,4 @@ class _CheckoutViewState extends State<_CheckoutView> {
     );
   }
 
-  Widget _choix(List<String> valeurs, String selected,
-      Map<String, String> labels, ValueChanged<String> onSelect) {
-    return Row(
-      children: valeurs.map((v) {
-        final sel = v == selected;
-        return Expanded(
-          child: Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: InkWell(
-              onTap: () => onSelect(v),
-              borderRadius: BorderRadius.circular(12),
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                decoration: BoxDecoration(
-                  color: sel ? _C.green.withValues(alpha: 0.10) : _C.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: sel ? _C.green : _C.border),
-                ),
-                alignment: Alignment.center,
-                child: Text(labels[v] ?? v,
-                    style: TextStyle(
-                        color: sel ? _C.green : _C.sub,
-                        fontWeight: FontWeight.w700)),
-              ),
-            ),
-          ),
-        );
-      }).toList(),
-    );
-  }
 }

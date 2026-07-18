@@ -67,50 +67,14 @@ class _DetailViewState extends State<_DetailView> {
   late CommandeModel commande = widget.args.commande;
   bool get isVendeur => widget.args.isVendeur;
 
-  Future<void> _payer() async {
-    context
-        .read<CommandeBloc>()
-        .add(PayerCommande(commande.id, methode: 'orange_money'));
+  /// Le mode de règlement a été fixé à la commande : relancer le paiement
+  /// reprend simplement là où il s'était arrêté.
+  void _payer() {
+    context.read<CommandeBloc>().add(PayerCommande(commande.id));
   }
 
   void _annuler() {
     context.read<CommandeBloc>().add(AnnulerCommande(commande.id));
-  }
-
-  void _avancerStatut() {
-    final suivant = _statutSuivant[commande.statut];
-    if (suivant != null) {
-      context.read<CommandeBloc>().add(ChangerStatutCommande(commande.id, suivant));
-    }
-  }
-
-  Future<void> _demanderRetour() async {
-    final raisonCtrl = TextEditingController();
-    final raison = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Demander un retour'),
-        content: TextField(
-          controller: raisonCtrl,
-          maxLines: 3,
-          decoration: const InputDecoration(
-            hintText: 'Expliquez la raison du retour',
-            border: OutlineInputBorder(),
-          ),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Annuler')),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, raisonCtrl.text.trim()),
-            child: const Text('Envoyer'),
-          ),
-        ],
-      ),
-    );
-    if (raison != null && raison.isNotEmpty && mounted) {
-      context.read<CommandeBloc>().add(DemanderRetourCommande(commande.id, raison));
-    }
   }
 
   @override
@@ -144,18 +108,23 @@ class _DetailViewState extends State<_DetailView> {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('Commande mise à jour')),
             );
-          } else if (state is RetourDemande) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Demande de retour envoyée')),
-            );
           } else if (state is PaiementInitie) {
-            final url = state.paymentUrl;
+            final url = state.paiement.urlPaiement;
             if (url != null && url.isNotEmpty) {
               final uri = Uri.tryParse(url);
               if (uri != null) {
                 await launchUrl(uri, mode: LaunchMode.externalApplication);
               }
+              // Au retour de la page du fournisseur, c'est le serveur qui fait
+              // foi sur l'issue du règlement.
+              if (context.mounted) {
+                context.read<CommandeBloc>().add(VerifierPaiement(commande.id));
+              }
             }
+          } else if (state is PaiementStatut) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Paiement : ${state.paiement.statutLibelle}')),
+            );
           }
         },
         builder: (context, state) {
@@ -246,25 +215,8 @@ class _DetailViewState extends State<_DetailView> {
         ),
       ));
     }
-    if (isVendeur && statutSuivant != null) {
-      boutons.add(Expanded(
-        child: ElevatedButton(
-          onPressed: _avancerStatut,
-          style: ElevatedButton.styleFrom(
-              backgroundColor: _C.green, foregroundColor: _C.white),
-          child: Text('→ ${kStatutCommandeLabels[statutSuivant]}'),
-        ),
-      ));
-    }
-    if (retournable) {
-      boutons.add(Expanded(
-        child: OutlinedButton(
-          onPressed: _demanderRetour,
-          style: OutlinedButton.styleFrom(foregroundColor: _C.green),
-          child: const Text('Demander un retour'),
-        ),
-      ));
-    }
+    // Ni avancement de statut ni demande de retour : le backend n'expose
+    // aucune de ces deux actions. Le statut est piloté par l'administration.
 
     if (boutons.isEmpty) return null;
     return Container(

@@ -1,26 +1,24 @@
 import '../datasources/commande_remote_datasource.dart';
+import '../models/adresse_model.dart';
 import '../models/commande_model.dart';
+import '../models/paiement_model.dart';
 
 /// Repository commande — fine couche au-dessus du datasource.
 class CommandeRepository {
   final CommandeRemoteDataSource remote;
   CommandeRepository(this.remote);
 
+  /// Le panier est côté serveur : la commande ne transmet donc pas les lignes,
+  /// seulement l'adresse de livraison et le mode de règlement retenu.
   Future<CommandeModel> creerCommande({
-    required List<Map<String, dynamic>> items,
-    String modeLivraison = 'livraison',
-    String modePaiement = 'en_ligne',
-    String? adresseLivraison,
-    String? numeroTelephone,
+    required String adresseId,
+    required String methode,
     String? note,
   }) {
     return remote.creerCommande({
-      'items': items,
-      'modeLivraison': modeLivraison,
-      'modePaiement': modePaiement,
-      if (adresseLivraison != null) 'adresseLivraison': adresseLivraison,
-      if (numeroTelephone != null) 'numeroTelephone': numeroTelephone,
-      if (note != null) 'note': note,
+      'adresseId': adresseId,
+      'methode': methode,
+      if (note != null && note.isNotEmpty) 'note': note,
     });
   }
 
@@ -31,16 +29,9 @@ class CommandeRepository {
 
   Future<CommandeModel> annuler(String id) => remote.annuler(id);
 
-  Future<String?> payer(String id,
-          {required String methode, String? numeroTelephone}) =>
-      remote.payer(id, methode: methode, numeroTelephone: numeroTelephone);
+  Future<PaiementModel> payer(String id) => remote.payer(id);
 
-  Future<List<CommandeModel>> commandesVendeur({String? statut}) =>
-      remote.commandesVendeur(statut: statut);
+  Future<PaiementModel> statutPaiement(String id) => remote.statutPaiement(id);
 
-  Future<CommandeModel> changerStatut(String id, String statut) =>
-      remote.changerStatut(id, statut);
-
-  Future<void> demandeRetour(String id, {required String raison}) =>
-      remote.demandeRetour(id, raison: raison);
+  Future<List<AdresseModel>> adresses() => remote.adresses();
 }

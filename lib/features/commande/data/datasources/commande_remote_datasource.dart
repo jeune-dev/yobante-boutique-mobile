@@ -1,5 +1,7 @@
 import 'package:dio/dio.dart';
+import '../models/adresse_model.dart';
 import '../models/commande_model.dart';
+import '../models/paiement_model.dart';
 import '../../../../core/constants/api_endpoints.dart';
 
 abstract class CommandeRemoteDataSource {
@@ -7,33 +9,39 @@ abstract class CommandeRemoteDataSource {
   Future<List<CommandeModel>> mesCommandes({String? statut});
   Future<CommandeModel> getCommande(String id);
   Future<CommandeModel> annuler(String id);
-  // Retourne l'URL de paiement (ou null pour Wave/à compléter)
-  Future<String?> payer(String id, {required String methode, String? numeroTelephone});
-  // Vendeur
-  Future<List<CommandeModel>> commandesVendeur({String? statut});
-  Future<CommandeModel> changerStatut(String id, String statut);
-  // Retour (acheteur) — uniquement si la commande est au statut 'livree'
-  Future<void> demandeRetour(String id, {required String raison});
+
+  /// Démarre le paiement de la commande. Le mode de règlement a été fixé au
+  /// moment de commander : il n'est pas renvoyé ici.
+  Future<PaiementModel> payer(String id);
+
+  /// État courant du paiement, pour savoir si le règlement a abouti.
+  Future<PaiementModel> statutPaiement(String id);
+
+  Future<List<AdresseModel>> adresses();
 }
 
 class CommandeRemoteDataSourceImpl implements CommandeRemoteDataSource {
   final Dio dio;
   CommandeRemoteDataSourceImpl(this.dio);
 
-  List<CommandeModel> _parseListe(dynamic data) {
-    final raw = (data is Map && data['commandes'] is List)
-        ? data['commandes'] as List
-        : (data is List ? data : <dynamic>[]);
-    return raw
-        .map((e) => CommandeModel.fromJson(e as Map<String, dynamic>))
-        .toList();
+  /// Les réponses ont la forme `{ success, message, data: { <cle>: ... } }`.
+  dynamic _contenu(dynamic reponse, String cle) {
+    if (reponse is! Map) return null;
+    final data = reponse['data'];
+    if (data is Map && data[cle] != null) return data[cle];
+    if (reponse[cle] != null) return reponse[cle];
+    return data;
   }
 
-  CommandeModel _parseUne(dynamic data) {
-    final map = (data is Map && data['commande'] is Map)
-        ? data['commande'] as Map<String, dynamic>
-        : data as Map<String, dynamic>;
-    return CommandeModel.fromJson(map);
+  List<CommandeModel> _parseListe(dynamic reponse) {
+    final brut = _contenu(reponse, 'commandes');
+    if (brut is! List) return const [];
+    return brut.map((e) => CommandeModel.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  CommandeModel _parseUne(dynamic reponse) {
+    final brut = _contenu(reponse, 'commande');
+    return CommandeModel.fromJson(Map<String, dynamic>.from(brut as Map));
   }
 
   @override
@@ -44,8 +52,10 @@ class CommandeRemoteDataSourceImpl implements CommandeRemoteDataSource {
 
   @override
   Future<List<CommandeModel>> mesCommandes({String? statut}) async {
-    final res = await dio.get(CommandeEndpoints.commandes,
-        queryParameters: statut != null ? {'statut': statut} : null);
+    final res = await dio.get(
+      CommandeEndpoints.commandes,
+      queryParameters: statut != null ? {'statut': statut} : null,
+    );
     return _parseListe(res.data);
   }
 
@@ -57,39 +67,31 @@ class CommandeRemoteDataSourceImpl implements CommandeRemoteDataSource {
 
   @override
   Future<CommandeModel> annuler(String id) async {
-    final res = await dio.put(CommandeEndpoints.annuler(id));
+    final res = await dio.patch(CommandeEndpoints.annuler(id));
     return _parseUne(res.data);
   }
 
   @override
-  Future<String?> payer(String id,
-      {required String methode, String? numeroTelephone}) async {
-    final res = await dio.post(CommandeEndpoints.payer(id), data: {
-      'methode': methode,
-      if (numeroTelephone != null) 'numeroTelephone': numeroTelephone,
-    });
-    final data = res.data;
-    if (data is Map && data['paymentUrl'] != null) {
-      return data['paymentUrl'].toString();
-    }
-    return null;
+  Future<PaiementModel> payer(String id) async {
+    final res = await dio.post(CommandeEndpoints.payer(id));
+    return PaiementModel.fromJson(
+      Map<String, dynamic>.from(_contenu(res.data, 'paiement') as Map),
+    );
   }
 
   @override
-  Future<List<CommandeModel>> commandesVendeur({String? statut}) async {
-    final res = await dio.get(CommandeEndpoints.commandesVendeur,
-        queryParameters: statut != null ? {'statut': statut} : null);
-    return _parseListe(res.data);
+  Future<PaiementModel> statutPaiement(String id) async {
+    final res = await dio.get(CommandeEndpoints.paiement(id));
+    return PaiementModel.fromJson(
+      Map<String, dynamic>.from(_contenu(res.data, 'paiement') as Map),
+    );
   }
 
   @override
-  Future<CommandeModel> changerStatut(String id, String statut) async {
-    final res = await dio.patch(CommandeEndpoints.statut(id), data: {'statut': statut});
-    return _parseUne(res.data);
-  }
-
-  @override
-  Future<void> demandeRetour(String id, {required String raison}) async {
-    await dio.post(CommandeEndpoints.demandeRetour(id), data: {'raison': raison});
+  Future<List<AdresseModel>> adresses() async {
+    final res = await dio.get(CompteEndpoints.adresses);
+    final brut = _contenu(res.data, 'adresses');
+    if (brut is! List) return const [];
+    return brut.map((e) => AdresseModel.fromJson(e as Map<String, dynamic>)).toList();
   }
 }

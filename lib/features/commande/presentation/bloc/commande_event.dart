@@ -13,45 +13,40 @@ class LoadMesCommandes extends CommandeEvent {
   List<Object?> get props => [statut];
 }
 
-/// Vendeur : charger les commandes reçues
-class LoadCommandesVendeur extends CommandeEvent {
-  final String? statut;
-  LoadCommandesVendeur({this.statut});
-  @override
-  List<Object?> get props => [statut];
-}
-
-/// Acheteur : créer une commande à partir du panier
+/// Acheteur : créer une commande à partir du panier.
+///
+/// Le panier est tenu côté serveur : seuls l'adresse de livraison et le mode
+/// de règlement sont transmis. Le mode choisi ici détermine le fournisseur de
+/// paiement utilisé ensuite.
 class CreerCommande extends CommandeEvent {
-  final List<Map<String, dynamic>> items;
-  final String modeLivraison;
-  final String modePaiement;
-  final String? adresseLivraison;
-  final String? numeroTelephone;
+  final String adresseId;
+  final String methode; // wave | orange_money | carte | cash_livraison
   final String? note;
 
   CreerCommande({
-    required this.items,
-    this.modeLivraison = 'livraison',
-    this.modePaiement = 'en_ligne',
-    this.adresseLivraison,
-    this.numeroTelephone,
+    required this.adresseId,
+    required this.methode,
     this.note,
   });
 
   @override
-  List<Object?> get props =>
-      [items, modeLivraison, modePaiement, adresseLivraison, numeroTelephone, note];
+  List<Object?> get props => [adresseId, methode, note];
 }
 
-/// Acheteur : payer une commande en ligne
+/// Acheteur : lancer le règlement d'une commande déjà créée
 class PayerCommande extends CommandeEvent {
   final String commandeId;
-  final String methode; // 'orange_money' | 'wave'
-  final String? numeroTelephone;
-  PayerCommande(this.commandeId, {required this.methode, this.numeroTelephone});
+  PayerCommande(this.commandeId);
   @override
-  List<Object?> get props => [commandeId, methode, numeroTelephone];
+  List<Object?> get props => [commandeId];
+}
+
+/// Acheteur : vérifier où en est le paiement, au retour de la page du fournisseur
+class VerifierPaiement extends CommandeEvent {
+  final String commandeId;
+  VerifierPaiement(this.commandeId);
+  @override
+  List<Object?> get props => [commandeId];
 }
 
 /// Acheteur : annuler une commande
@@ -60,22 +55,4 @@ class AnnulerCommande extends CommandeEvent {
   AnnulerCommande(this.commandeId);
   @override
   List<Object?> get props => [commandeId];
-}
-
-/// Vendeur : faire avancer le statut
-class ChangerStatutCommande extends CommandeEvent {
-  final String commandeId;
-  final String statut;
-  ChangerStatutCommande(this.commandeId, this.statut);
-  @override
-  List<Object?> get props => [commandeId, statut];
-}
-
-/// Acheteur : demander un retour sur une commande livrée
-class DemanderRetourCommande extends CommandeEvent {
-  final String commandeId;
-  final String raison;
-  DemanderRetourCommande(this.commandeId, this.raison);
-  @override
-  List<Object?> get props => [commandeId, raison];
 }

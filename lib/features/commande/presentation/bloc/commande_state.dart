@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 import '../../data/models/commande_model.dart';
+import '../../data/models/paiement_model.dart';
 
 abstract class CommandeState extends Equatable {
   @override
@@ -10,7 +11,7 @@ class CommandeInitial extends CommandeState {}
 
 class CommandeLoading extends CommandeState {}
 
-/// Liste de commandes (acheteur ou vendeur)
+/// Liste de commandes de l'acheteur
 class CommandesLoaded extends CommandeState {
   final List<CommandeModel> commandes;
   CommandesLoaded(this.commandes);
@@ -26,16 +27,25 @@ class CommandeCreee extends CommandeState {
   List<Object?> get props => [commande];
 }
 
-/// Paiement initié : URL vers laquelle rediriger l'acheteur (peut être null)
+/// Paiement initié. `paiement.demandeUneAction` indique s'il reste une page à
+/// ouvrir : le paiement à la livraison n'en a aucune.
 class PaiementInitie extends CommandeState {
   final String commandeId;
-  final String? paymentUrl;
-  PaiementInitie(this.commandeId, this.paymentUrl);
+  final PaiementModel paiement;
+  PaiementInitie(this.commandeId, this.paiement);
   @override
-  List<Object?> get props => [commandeId, paymentUrl];
+  List<Object?> get props => [commandeId, paiement.id, paiement.statut];
 }
 
-/// Une commande a été mise à jour (statut, annulation)
+/// État du paiement après vérification auprès du serveur
+class PaiementStatut extends CommandeState {
+  final PaiementModel paiement;
+  PaiementStatut(this.paiement);
+  @override
+  List<Object?> get props => [paiement.id, paiement.statut];
+}
+
+/// Une commande a été mise à jour (annulation)
 class CommandeMiseAJour extends CommandeState {
   final CommandeModel commande;
   CommandeMiseAJour(this.commande);
@@ -48,12 +58,4 @@ class CommandeError extends CommandeState {
   CommandeError(this.message);
   @override
   List<Object?> get props => [message];
-}
-
-/// La demande de retour a été envoyée avec succès
-class RetourDemande extends CommandeState {
-  final String commandeId;
-  RetourDemande(this.commandeId);
-  @override
-  List<Object?> get props => [commandeId];
 }
