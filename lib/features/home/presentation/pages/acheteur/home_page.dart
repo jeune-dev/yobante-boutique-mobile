@@ -35,6 +35,10 @@ import '../../../../compte/presentation/bloc/compte_bloc.dart';
 import '../../../../compte/presentation/bloc/compte_event.dart';
 import '../../../../compte/presentation/bloc/compte_state.dart';
 import '../../../../../core/widgets/cloche_notifications.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import '../../../data/datasources/banniere_remote_datasource.dart';
+import '../../../data/models/banniere_model.dart';
+import '../../../../promotions/data/models/bloc_promo_model.dart';
 import 'dart:async';
 
 
@@ -112,8 +116,18 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   int _promoAVenirPage = 0;
   Timer? _promoTimer;
 
-  // Images des blocs promo pilotées depuis le dashboard (section -> url).
-  final Map<String, String> _blocImages = {};
+  // Sous-sections de chaque section, pilotées depuis le dashboard.
+  // Une section peut en porter plusieurs : le carrousel les parcourt.
+  final Map<String, List<BlocPromoModel>> _blocsParSection = {};
+
+  // Bannières du haut, également pilotées depuis le dashboard.
+  List<BanniereModel> _bannieres = [];
+
+  /// Images d'une section, dans l'ordre défini par l'administration.
+  List<String> _imagesSection(String section) => (_blocsParSection[section] ?? [])
+      .map((b) => b.image ?? '')
+      .where((url) => url.isNotEmpty)
+      .toList();
 
   @override
   void initState() {
@@ -130,6 +144,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     _initBloc();
     _promotionsBloc = sl<PromotionsBloc>()..add(LoadPromotionsActives());
     _fetchBlocsPromo();
+    _fetchBannieres();
     _startPromoAutoScroll();
     if (widget.user == null) {
       _compteSub = _compteBloc.stream.listen((state) {
@@ -144,17 +159,29 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     }
   }
 
-  // Récupère les images/titres des blocs promo depuis l'API (non bloquant).
+  /// Récupère les sous-sections et les bannières définies dans le dashboard.
+  ///
+  /// Non bloquant : en cas d'échec, l'accueil retombe sur les visuels fournis
+  /// avec l'application plutôt que d'afficher des trous.
   Future<void> _fetchBlocsPromo() async {
     try {
       final blocs = await sl<PromotionsRemoteDataSource>().blocsPromo();
       if (!mounted) return;
       setState(() {
+        _blocsParSection.clear();
         for (final b in blocs) {
-          if ((b.image ?? '').isNotEmpty) _blocImages[b.section] = b.image!;
+          _blocsParSection.putIfAbsent(b.section, () => []).add(b);
         }
       });
-    } catch (_) {/* blocs masqués → fallback sur les images par défaut */}
+    } catch (_) {/* sections masquées → visuels par défaut */}
+  }
+
+  Future<void> _fetchBannieres() async {
+    try {
+      final bannieres = await sl<BanniereRemoteDataSource>().actives();
+      if (!mounted) return;
+      setState(() => _bannieres = bannieres);
+    } catch (_) {/* bannière par défaut conservée */}
   }
 
   Future<void> _initBloc() async {
@@ -422,19 +449,76 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   }
 
   // ── Bannière publicitaire (image adaptée au format mobile) ──────────────────
+  /// Section principale : les bannières définies dans le dashboard.
+  ///
+  /// Tant qu'aucune n'est publiée, l'image livrée avec l'application sert de
+  /// repli — l'accueil n'est jamais vide.
   Widget _buildImageBanner() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 2),
-      child: GestureDetector(
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const PromotionsActivesPage()),
+    if (_bannieres.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 2),
+        child: GestureDetector(
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const PromotionsActivesPage()),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(20),
+            child: Image.asset(
+              'assets/images/banniere du haut.png',
+              width: double.infinity,
+              fit: BoxFit.fitWidth,
+            ),
+          ),
         ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(20),
-          child: Image.asset(
+      );
+    }
+
+    // Une seule bannière : pas de carrousel, elle occupe toute la largeur.
+    if (_bannieres.length == 1) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 2),
+        child: _banniereImage(_bannieres.first, pleineLargeur: true),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 16, bottom: 2),
+      child: SizedBox(
+        height: 168,
+        child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          itemCount: _bannieres.length,
+          separatorBuilder: (_, __) => const SizedBox(width: 12),
+          itemBuilder: (_, i) => _banniereImage(_bannieres[i]),
+        ),
+      ),
+    );
+  }
+
+  Widget _banniereImage(BanniereModel banniere, {bool pleineLargeur = false}) {
+    return GestureDetector(
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const PromotionsActivesPage()),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: CachedNetworkImage(
+          imageUrl: banniere.image,
+          width: pleineLargeur ? double.infinity : 320,
+          height: pleineLargeur ? null : 168,
+          fit: pleineLargeur ? BoxFit.fitWidth : BoxFit.cover,
+          placeholder: (_, __) => Container(
+            width: pleineLargeur ? double.infinity : 320,
+            height: 168,
+            color: _C.bg,
+          ),
+          // Une bannière illisible ne doit pas casser la mise en page.
+          errorWidget: (_, __, ___) => Image.asset(
             'assets/images/banniere du haut.png',
-            width: double.infinity,
-            fit: BoxFit.fitWidth,
+            width: pleineLargeur ? double.infinity : 320,
+            height: pleineLargeur ? null : 168,
+            fit: BoxFit.cover,
           ),
         ),
       ),
@@ -477,59 +561,57 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                     color: _C.black, letterSpacing: -0.4)),
           ),
           const SizedBox(height: 14),
-          // Bannière pilotée depuis le dashboard (si définie), sinon carrousel d'assets.
-          if (_blocImages['nos_promos_du_moment'] != null)
-            _buildBlocBanner(_blocImages['nos_promos_du_moment']!)
-          else
-            SizedBox(
-              height: 170,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 18),
-                itemCount: _promoImages.length + 1, // +1 : carte "Voir tous"
-                separatorBuilder: (_, __) => const SizedBox(width: 14),
-                itemBuilder: (context, i) {
-                  if (i == _promoImages.length) return _buildVoirTousCard();
-                  return GestureDetector(
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const PromotionsActivesPage()),
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(18),
-                      child: Image.asset(
-                        _promoImages[i],
-                        width: 302,
-                        height: 170,
-                        fit: BoxFit.cover,
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
+          // Sous-sections définies dans le dashboard ; à défaut, visuels livrés.
+          _carrouselSection('nos_promos_du_moment', _promoImages),
         ],
       ),
     );
   }
 
-  // Bannière pleine largeur d'un bloc promo (image gérée depuis le dashboard).
-  Widget _buildBlocBanner(String url) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 18),
-      child: GestureDetector(
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const PromotionsActivesPage()),
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(18),
-          child: Image.network(
-            url,
-            width: double.infinity,
-            height: 170,
-            fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-          ),
-        ),
+  /// Carrousel des sous-sections d'une section.
+  ///
+  /// Les images viennent du dashboard ; `secours` n'est utilisé que si
+  /// l'administration n'en a défini aucune, pour ne pas laisser un vide.
+  Widget _carrouselSection(String section, List<String> secours) {
+    final distantes = _imagesSection(section);
+    final utiliseSecours = distantes.isEmpty;
+    final total = utiliseSecours ? secours.length : distantes.length;
+
+    return SizedBox(
+      height: 170,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 18),
+        itemCount: total + 1, // +1 : carte « Voir tous »
+        separatorBuilder: (_, __) => const SizedBox(width: 14),
+        itemBuilder: (context, i) {
+          if (i == total) return _buildVoirTousCard();
+          return GestureDetector(
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const PromotionsActivesPage()),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(18),
+              child: utiliseSecours
+                  ? Image.asset(secours[i], width: 302, height: 170, fit: BoxFit.cover)
+                  : CachedNetworkImage(
+                      imageUrl: distantes[i],
+                      width: 302,
+                      height: 170,
+                      fit: BoxFit.cover,
+                      placeholder: (_, __) =>
+                          Container(width: 302, height: 170, color: _C.bg),
+                      errorWidget: (_, __, ___) => Container(
+                        width: 302,
+                        height: 170,
+                        color: _C.bg,
+                        child: const Icon(Icons.image_not_supported_outlined,
+                            color: _C.sub),
+                      ),
+                    ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -550,28 +632,30 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                     color: _C.black, letterSpacing: -0.4)),
           ),
           const SizedBox(height: 14),
-          if (_blocImages['a_ne_pas_rater'] != null)
-            _buildBlocBanner(_blocImages['a_ne_pas_rater']!)
+          // Sous-sections du dashboard si elles existent, sinon les cartes
+          // éditoriales par défaut.
+          if (_imagesSection('a_ne_pas_rater').isNotEmpty)
+            _carrouselSection('a_ne_pas_rater', const [])
           else
-          SizedBox(
-            height: 178,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 18),
-              itemCount: count + 1, // +1 : carte "Voir tous"
-              separatorBuilder: (_, __) => const SizedBox(width: 14),
-              itemBuilder: (context, i) {
-                if (i == count) return _buildVoirTousCard();
-                final g = _adGradients[i % _adGradients.length];
-                final darkText = i % _adGradients.length == 1;
-                final ad = _adsDefault[i];
-                return _buildAdCard(
-                  gradient: g, darkText: darkText,
-                  tag: ad.tag, big: ad.big, sub: ad.sub,
-                );
-              },
+            SizedBox(
+              height: 178,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 18),
+                itemCount: count + 1, // +1 : carte "Voir tous"
+                separatorBuilder: (_, __) => const SizedBox(width: 14),
+                itemBuilder: (context, i) {
+                  if (i == count) return _buildVoirTousCard();
+                  final g = _adGradients[i % _adGradients.length];
+                  final darkText = i % _adGradients.length == 1;
+                  final ad = _adsDefault[i];
+                  return _buildAdCard(
+                    gradient: g, darkText: darkText,
+                    tag: ad.tag, big: ad.big, sub: ad.sub,
+                  );
+                },
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -782,16 +866,19 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     'assets/images/black friday.png',
   ];
 
-  // Nombre de bannières effectives du bloc "à venir" (1 si image dashboard, sinon assets).
-  int get _promoAVenirCount =>
-      _blocImages['nos_promos_a_venir'] != null ? 1 : _promoAVenirImages.length;
+  // Nombre de bannières effectives du bloc « à venir » : celles du dashboard
+  // si elles existent, sinon les visuels livrés avec l'application.
+  int get _promoAVenirCount {
+    final distantes = _imagesSection('nos_promos_a_venir');
+    return distantes.isNotEmpty ? distantes.length : _promoAVenirImages.length;
+  }
 
   Widget _buildNosPromosAVenir() {
     final double bannerW = MediaQuery.of(context).size.width - 32;
     final double bannerH = bannerW / 1.776; // format 16:9 des bannières
-    final String? apiImg = _blocImages['nos_promos_a_venir'];
-    final List<String> imgs = apiImg != null ? [apiImg] : _promoAVenirImages;
-    final bool isNetwork = apiImg != null;
+    final List<String> distantes = _imagesSection('nos_promos_a_venir');
+    final bool isNetwork = distantes.isNotEmpty;
+    final List<String> imgs = isNetwork ? distantes : _promoAVenirImages;
     return Padding(
       padding: const EdgeInsets.only(top: 26),
       child: Column(

@@ -154,6 +154,13 @@ class NotificationsEndpoints {
   static const unregisterDeviceToken = '/device-token/unregister';
 }
 
+/// Bannières de la section principale de l'accueil.
+class BanniereEndpoints {
+  BanniereEndpoints._();
+
+  static const actives = '/bannieres';
+}
+
 /// Promotions.
 class PromotionsEndpoints {
   PromotionsEndpoints._();

@@ -67,6 +67,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'core/services/token_service.dart';
 import 'core/services/notification_service.dart';
 import 'core/services/push_service.dart';
+import 'package:yobante/features/home/data/datasources/banniere_remote_datasource.dart';
 import 'core/services/socket_service.dart';
 
 // Service Locator
@@ -420,6 +421,11 @@ Future<void> init() async {
   //================================================
   // FEATURES - PROMOTIONS
   //================================================
+
+  // Bannières de l'accueil, pilotées depuis le dashboard.
+  sl.registerLazySingleton<BanniereRemoteDataSource>(
+        () => BanniereRemoteDataSourceImpl(sl()),
+  );
 
   sl.registerLazySingleton<PromotionsRemoteDataSource>(
         () => PromotionsRemoteDataSourceImpl(sl()),
