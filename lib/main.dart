@@ -9,6 +9,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:yobante/core/connection/auth_interceptor.dart';
+import 'package:yobante/core/services/push_service.dart';
 
 
 
@@ -55,6 +56,11 @@ void main() async {
 
     // dotenv est chargé une seule fois, à l'intérieur de di.init().
     await di.init();
+
+    // Push FCM : silencieux et sans effet tant que google-services.json est
+    // absent. Doit précéder runApp pour capter une ouverture depuis une
+    // notification alors que le processus était éteint.
+    await di.sl<PushService>().initialiser();
 
     runApp(const MyApp());
   }, (error, stack) {

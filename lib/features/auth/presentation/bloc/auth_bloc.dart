@@ -1,6 +1,8 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../../../core/services/token_service.dart';
+import '../../../../core/services/notification_service.dart';
+import '../../../../core/services/push_service.dart';
 import '../../../../injection_container.dart';
 import '../../domain/usecases/login_user.dart';
 import '../../domain/usecases/register_user.dart';
@@ -83,6 +85,11 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
     try {
       final storage = sl<FlutterSecureStorage>();
+
+      // Détacher l'appareil avant de perdre le jeton d'authentification : sans
+      // cela, le compte suivant recevrait les notifications du précédent.
+      await sl<PushService>().desactiver();
+      sl<NotificationService>().arreter();
 
       await sl<TokenService>().clearToken();
       await storage.delete(key: 'user_id');

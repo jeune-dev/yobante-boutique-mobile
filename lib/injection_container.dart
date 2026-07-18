@@ -66,6 +66,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'core/services/token_service.dart';
 import 'core/services/notification_service.dart';
+import 'core/services/push_service.dart';
 import 'core/services/socket_service.dart';
 
 // Service Locator
@@ -411,6 +412,9 @@ Future<void> init() async {
 
   // Affichage dans le bandeau système + compteur de non-lues des cloches.
   sl.registerLazySingleton(() => NotificationService());
+
+  // Push FCM : actif uniquement si google-services.json est présent.
+  sl.registerLazySingleton(() => PushService());
   sl.registerFactory(() => NotificationsBloc(sl()));
 
   //================================================

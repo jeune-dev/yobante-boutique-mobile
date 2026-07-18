@@ -8,6 +8,20 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// Firebase n'est activé que si google-services.json est présent. Le plugin
+// échoue sur son absence : l'appliquer sans condition rendrait le projet
+// incompilable tant que le fichier n'a pas été déposé. Sans lui, l'application
+// se construit et fonctionne, seul le push hors ligne est indisponible.
+val googleServicesFile = file("google-services.json")
+if (googleServicesFile.exists()) {
+    apply(plugin = "com.google.gms.google-services")
+} else {
+    logger.lifecycle(
+        "google-services.json absent : Firebase désactivé, " +
+            "les notifications push hors ligne ne fonctionneront pas."
+    )
+}
+
 // Chargement des identifiants de signature release depuis android/key.properties
 // (ce fichier ne doit PAS être versionné — voir .gitignore). Si absent, on retombe
 // sur les clés debug pour que `flutter run` continue de fonctionner.
