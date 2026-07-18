@@ -770,7 +770,7 @@ class _RegisterPageState extends State<RegisterPage>
               // Nom boutique
               _buildField(
                 label: 'Nom de la boutique',
-                hint: 'Ma Boutique Yobante',
+                hint: 'Nom de votre boutique',
                 controller: _shopNameController,
                 focusNode: _shopNameFocus,
                 icon: Icons.store_outlined,

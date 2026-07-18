@@ -37,7 +37,7 @@ class _C {
 }
 
 /// Ouvre le modal détail produit existant. Réutilisable depuis n'importe quel
-/// écran (accueil, boutique, ma boutique…).
+/// écran (accueil, boutique…).
 void showProduitModal(BuildContext context, ProduitModel produit,
     {bool allowPanier = true}) {
   showModalBottomSheet(

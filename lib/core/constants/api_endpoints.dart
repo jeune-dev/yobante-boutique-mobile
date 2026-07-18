@@ -90,16 +90,6 @@ class CompteEndpoints {
   static const deleteAccount = '/profile';
 }
 
-/// Boutique du vendeur.
-class BoutiqueEndpoints {
-  BoutiqueEndpoints._();
-
-  static const maBoutique = '/vendeur/ma-boutique';
-  static const creerBoutique = '/vendeur/creer-boutique';
-  static const modifierBoutique = '/vendeur/modifier-boutique';
-  static const pause = '/vendeur/boutique/pause';
-  static const reactiver = '/vendeur/boutique/reactiver';
-}
 
 /// Abonnement vendeur.
 class AbonnementEndpoints {

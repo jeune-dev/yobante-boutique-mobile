@@ -11,7 +11,6 @@ import '../../../../compte/presentation/bloc/compte_event.dart';
 import '../../../../compte/presentation/bloc/compte_state.dart';
 import '../../../../compte/presentation/pages/edit_profil_page.dart';
 import '../../../../compte/presentation/pages/change_password_page.dart';
-import '../../../../boutique/presentation/pages/ma_boutique_page.dart';
 import '../../../../abonnement/presentation/pages/mon_abonnement_page.dart';
 import '../../../../avis/presentation/pages/avis_recus_page.dart';
 import '../../../../promotions/presentation/pages/mes_promotions_page.dart';
@@ -469,23 +468,14 @@ class _ProfilPageState extends State<ProfilPage>
     );
   }
 
-  // ── Ma boutique (boutique, abonnement, avis, promotions, notifs, messages) ─
+  // ── Mon activité (abonnement, avis, promotions, notifs, messages) ─────────
   Widget _buildBoutiqueCard() {
     return _SectionCard(
       iconBg: _C.greenLight,
       icon: Icons.storefront_outlined,
       iconColor: _C.green,
-      title: 'Ma boutique',
+      title: 'Mon activité',
       children: [
-        _RowItem(
-          iconBg: _C.surface,
-          icon: Icons.storefront_outlined,
-          label: 'Ma boutique',
-          sub: 'Infos, horaires, pause/réactivation',
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const MaBoutiquePage()),
-          ),
-        ),
         _RowItem(
           iconBg: _C.surface,
           icon: Icons.workspace_premium_outlined,

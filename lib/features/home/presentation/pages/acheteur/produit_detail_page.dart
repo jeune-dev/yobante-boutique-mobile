@@ -18,7 +18,7 @@ class _C {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// Carte produit réutilisable (accueil, boutique, ma boutique) — image + nom +
+// Carte produit réutilisable (accueil, boutique) — image + nom +
 // nom du restaurant + prix + un seul bouton "+" pour ajouter au panier.
 // Le clic sur la carte ouvre le détail (géré par l'appelant via [onTap]).
 // ══════════════════════════════════════════════════════════════════════════════

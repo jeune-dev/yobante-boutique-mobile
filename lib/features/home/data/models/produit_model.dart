@@ -34,6 +34,8 @@ class ProduitModel {
   final int    stock;            // stock disponible (côté vendeur)
   final int    stockAlloue;      // stock réservé aux commandes en cours
   final String statutValidation; // en_attente | valide_step1 | valide | rejete
+  final String messageVendeur;   // mot du vendeur au relecteur de la demande
+  final String motifRejet;       // raison du refus, restituée dans le suivi
 
   ProduitModel({
     required this.id,
@@ -54,6 +56,8 @@ class ProduitModel {
     this.stock = 0,
     this.stockAlloue = 0,
     this.statutValidation = 'valide',
+    this.messageVendeur = '',
+    this.motifRejet = '',
   });
 
   factory ProduitModel.fromJson(Map<String, dynamic> json) {
@@ -141,6 +145,8 @@ class ProduitModel {
       stock:       stock,
       stockAlloue: stockAlloue,
       statutValidation: statutValidation,
+      messageVendeur: json['messageVendeur']?.toString() ?? '',
+      motifRejet: json['motifRejet']?.toString() ?? '',
     );
   }
 

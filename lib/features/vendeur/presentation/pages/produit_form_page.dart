@@ -1,24 +1,22 @@
 import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:image_cropper/image_cropper.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+
 import '../../../../injection_container.dart';
 import '../../../home/data/models/produit_model.dart';
 import '../../data/datasources/vendeur_produit_datasource.dart';
 import '../../data/models/categorie_model.dart';
+import '../widgets/statut_chip.dart';
 
-class _C {
-  static const green = Color(0xFF163A9E);
-  static const black = Color(0xFF1A1A1A);
-  static const white = Color(0xFFFFFFFF);
-  static const bg = Color(0xFFF5F7FB);
-  static const sub = Color(0xFF6B7280);
-  static const border = Color(0xFFDDE3EF);
-}
-
+/// Formulaire de demande de publication.
+///
+/// Le vendeur ne publie pas : il prépare la fiche produit (photos, description,
+/// prix, stock souhaité) et l'envoie à l'administration, qui décide. Un message
+/// libre permet d'expliquer la demande à qui la relira.
 class ProduitFormPage extends StatefulWidget {
-  final ProduitModel? produit; // null = création
+  final ProduitModel? produit;
   const ProduitFormPage({super.key, this.produit});
 
   @override
@@ -26,37 +24,32 @@ class ProduitFormPage extends StatefulWidget {
 }
 
 class _ProduitFormPageState extends State<ProduitFormPage> {
+  static const _maxImages = 5; // le backend n'en accepte pas davantage
+
   final _formKey = GlobalKey<FormState>();
   final _nomCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
   final _prixCtrl = TextEditingController();
-  final _qteCtrl = TextEditingController();
+  final _stockCtrl = TextEditingController();
+  final _messageCtrl = TextEditingController();
 
   final _ds = sl<VendeurProduitDataSource>();
+
   List<CategorieModel> _categories = [];
   String? _categorieId;
-  String? _imagePath;
-  bool _loading = false;
-  bool _loadingCats = true;
+  bool _chargementCats = true;
   String? _erreurCats;
 
-  // ── Galerie multi-images ──────────────────────────────────────────────
-  // Le backend n'expose pas d'ajout/suppression d'image à l'unité : un envoi
-  // d'images sur POST/PUT remplace l'intégralité de la galerie. On accumule
-  // donc les choix localement et on les applique à l'enregistrement.
-  late List<ProduitImage> _imagesExistantes;
+  /// Photos choisies sur l'appareil. Les envoyer remplace l'intégralité de la
+  /// galerie côté backend : en modification, on ne les touche que si le vendeur
+  /// en sélectionne de nouvelles.
   final List<String> _nouvellesImages = [];
-  bool _uploadingImages = false;
-  String? _suppressionImageId;
+  late List<ProduitImage> _imagesExistantes;
 
-  /// Images envoyées au backend : la sélection locale si elle existe, sinon
-  /// rien (les images actuelles sont alors conservées côté serveur).
-  List<String> get _imagesAEnvoyer => [
-        if (_imagePath != null) _imagePath!,
-        ..._nouvellesImages,
-      ];
+  bool _envoiEnCours = false;
 
   bool get _isEdit => widget.produit != null;
+  int get _nbImages => _imagesExistantes.length + _nouvellesImages.length;
 
   @override
   void initState() {
@@ -67,33 +60,10 @@ class _ProduitFormPageState extends State<ProduitFormPage> {
       _nomCtrl.text = p.nom;
       _descCtrl.text = p.description;
       _prixCtrl.text = p.prix;
-      _qteCtrl.text = p.quantite.toString();
+      _stockCtrl.text = p.stockAlloue > 0 ? p.stockAlloue.toString() : '';
+      _messageCtrl.text = p.messageVendeur;
     }
     _chargerCategories();
-  }
-
-  Future<void> _chargerCategories() async {
-    setState(() {
-      _loadingCats = true;
-      _erreurCats = null;
-    });
-    try {
-      final cats = await _ds.categories();
-      setState(() {
-        _categories = cats;
-        _loadingCats = false;
-        // Pré-sélection en édition si la catégorie existe
-        if (_isEdit) {
-          final match = cats.where((c) => c.nom == widget.produit!.categorie);
-          if (match.isNotEmpty) _categorieId = match.first.id;
-        }
-      });
-    } catch (e) {
-      setState(() {
-        _loadingCats = false;
-        _erreurCats = e.toString();
-      });
-    }
   }
 
   @override
@@ -101,79 +71,78 @@ class _ProduitFormPageState extends State<ProduitFormPage> {
     _nomCtrl.dispose();
     _descCtrl.dispose();
     _prixCtrl.dispose();
-    _qteCtrl.dispose();
+    _stockCtrl.dispose();
+    _messageCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _choisirImage() async {
-    final picker = ImagePicker();
-    final x = await picker.pickImage(
-        source: ImageSource.gallery, imageQuality: 90, maxWidth: 1600);
-    if (x == null) return;
-    // Recadrage / zoom / rotation avant validation
-    final cropped = await ImageCropper().cropImage(
-      sourcePath: x.path,
-      uiSettings: [
-        AndroidUiSettings(
-          toolbarTitle: 'Recadrer la photo',
-          toolbarColor: _C.green,
-          toolbarWidgetColor: Colors.white,
-          activeControlsWidgetColor: _C.green,
-          lockAspectRatio: false,
-          hideBottomControls: false,
-        ),
-        IOSUiSettings(
-          title: 'Recadrer la photo',
-          aspectRatioLockEnabled: false,
-        ),
-      ],
-    );
-    if (!mounted) return;
-    setState(() => _imagePath = cropped?.path ?? x.path);
+  Future<void> _chargerCategories() async {
+    setState(() {
+      _chargementCats = true;
+      _erreurCats = null;
+    });
+    try {
+      final cats = await _ds.categories();
+      if (!mounted) return;
+      setState(() {
+        _categories = cats;
+        _chargementCats = false;
+        if (_isEdit) {
+          final match = cats.where((c) => c.nom == widget.produit!.categorie);
+          if (match.isNotEmpty) _categorieId = match.first.id;
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _chargementCats = false;
+        _erreurCats = e.toString();
+      });
+    }
   }
 
-  Future<void> _ajouterPhotosSupplementaires() async {
-    if (!_isEdit) return;
-    final picker = ImagePicker();
-    final fichiers =
-        await picker.pickMultiImage(imageQuality: 80, maxWidth: 1200);
-    if (fichiers.isEmpty) return;
+  Future<void> _ajouterPhotos() async {
+    final restant = _maxImages - _nbImages;
+    if (restant <= 0) {
+      _message('Maximum $_maxImages photos');
+      return;
+    }
+    final fichiers = await ImagePicker().pickMultiImage(imageQuality: 80, maxWidth: 1400);
+    if (fichiers.isEmpty || !mounted) return;
     setState(() {
-      _nouvellesImages.addAll(fichiers.map((f) => f.path));
-      _uploadingImages = false;
+      _nouvellesImages.addAll(fichiers.take(restant).map((f) => f.path));
     });
-    if (!mounted) return;
+    if (fichiers.length > restant) {
+      _message('Seules $restant photo(s) ont été ajoutées (maximum $_maxImages)');
+    }
+  }
+
+  void _message(String texte, {bool erreur = false}) {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Photos ajoutées — elles remplaceront la galerie à l\'enregistrement'),
+      SnackBar(
+        content: Text(texte),
+        backgroundColor: erreur ? VendeurCouleurs.rouge : null,
       ),
     );
   }
 
-  /// Retire une image existante de la galerie. La suppression n'est effective
-  /// côté serveur qu'à l'enregistrement, qui réenvoie la galerie complète.
-  void _supprimerPhoto(ProduitImage image) {
-    if (!_isEdit) return;
-    setState(() {
-      _imagesExistantes.removeWhere((i) => i.id == image.id);
-      _suppressionImageId = null;
-    });
-  }
-
-  Future<void> _soumettre() async {
+  Future<void> _envoyer() async {
     if (!_formKey.currentState!.validate()) return;
     if (_categorieId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Choisissez une catégorie')),
-      );
+      _message('Choisissez une catégorie', erreur: true);
       return;
     }
-    setState(() => _loading = true);
+    if (_nbImages == 0) {
+      _message('Ajoutez au moins une photo du produit', erreur: true);
+      return;
+    }
+
+    setState(() => _envoiEnCours = true);
     try {
       final prix = num.tryParse(_prixCtrl.text.trim()) ?? 0;
-      // Stock demandé par le vendeur : c'est l'administration qui décide du
-      // stock finalement alloué lors de la validation.
-      final stockDemande = int.tryParse(_qteCtrl.text.trim()) ?? 0;
+      final stockDemande = int.tryParse(_stockCtrl.text.trim()) ?? 0;
+      final message = _messageCtrl.text.trim();
+
       if (_isEdit) {
         await _ds.modifierProduit(
           id: widget.produit!.id,
@@ -182,7 +151,8 @@ class _ProduitFormPageState extends State<ProduitFormPage> {
           prix: prix,
           stockAlloue: stockDemande,
           categorieId: _categorieId,
-          imagePaths: _imagesAEnvoyer,
+          messageVendeur: message,
+          imagePaths: _nouvellesImages,
         );
       } else {
         await _ds.ajouterProduit(
@@ -191,74 +161,164 @@ class _ProduitFormPageState extends State<ProduitFormPage> {
           prix: prix,
           stockAlloue: stockDemande,
           categorieId: _categorieId!,
-          imagePaths: _imagesAEnvoyer,
+          messageVendeur: message,
+          imagePaths: _nouvellesImages,
         );
       }
       if (!mounted) return;
       Navigator.of(context).pop(true);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erreur : $e'), backgroundColor: Colors.red),
-      );
+      _message('Envoi impossible : $e', erreur: true);
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) setState(() => _envoiEnCours = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _C.bg,
+      backgroundColor: VendeurCouleurs.fond,
       appBar: AppBar(
-        backgroundColor: _C.white,
+        backgroundColor: VendeurCouleurs.blanc,
         elevation: 0.5,
-        foregroundColor: _C.black,
-        title: Text(_isEdit ? 'Modifier le produit' : 'Nouveau produit'),
+        foregroundColor: VendeurCouleurs.noir,
+        title: Text(_isEdit ? 'Modifier la demande' : 'Nouvelle demande'),
       ),
       body: Form(
         key: _formKey,
         child: ListView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
           children: [
-            _imagePicker(),
-            const SizedBox(height: 16),
-            _input(_nomCtrl, 'Nom du produit',
-                validator: (v) =>
-                    (v == null || v.trim().isEmpty) ? 'Nom requis' : null),
-            const SizedBox(height: 12),
-            _input(_descCtrl, 'Description', maxLines: 3,
-                validator: (v) =>
-                    (v == null || v.trim().isEmpty) ? 'Description requise' : null),
-            const SizedBox(height: 12),
-            _input(_prixCtrl, 'Prix (FCFA)',
-                keyboard: TextInputType.number,
-                validator: (v) =>
-                    (num.tryParse(v ?? '') == null) ? 'Prix invalide' : null),
-            const SizedBox(height: 12),
-            _categoriePicker(),
-            if (_isEdit) ...[
-              const SizedBox(height: 24),
-              _photosSupplementairesSection(),
-            ],
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: _loading ? null : _soumettre,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _C.green,
-                foregroundColor: _C.white,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14)),
+            _rappel(),
+            const SizedBox(height: 20),
+            _titre('Photos du produit', obligatoire: true),
+            const SizedBox(height: 4),
+            const Text(
+              'Jusqu\'à $_maxImages photos. La première sert de visuel principal.',
+              style: TextStyle(fontSize: 12, color: VendeurCouleurs.gris),
+            ),
+            const SizedBox(height: 10),
+            _galerie(),
+            const SizedBox(height: 22),
+            _titre('Nom du produit', obligatoire: true),
+            const SizedBox(height: 8),
+            _champ(
+              controller: _nomCtrl,
+              hint: 'Ex. Sac en cuir cousu main',
+              validator: (v) =>
+                  (v == null || v.trim().length < 3) ? 'Indiquez un nom d\'au moins 3 caractères' : null,
+            ),
+            const SizedBox(height: 18),
+            _titre('Catégorie', obligatoire: true),
+            const SizedBox(height: 8),
+            _selecteurCategorie(),
+            const SizedBox(height: 18),
+            _titre('Description', obligatoire: true),
+            const SizedBox(height: 4),
+            const Text(
+              'Matière, dimensions, coloris… c\'est ce que lira le client.',
+              style: TextStyle(fontSize: 12, color: VendeurCouleurs.gris),
+            ),
+            const SizedBox(height: 8),
+            _champ(
+              controller: _descCtrl,
+              hint: 'Décrivez votre produit',
+              lignes: 5,
+              validator: (v) => (v == null || v.trim().length < 10)
+                  ? 'Une description d\'au moins 10 caractères aide à la validation'
+                  : null,
+            ),
+            const SizedBox(height: 18),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _titre('Prix (FCFA)', obligatoire: true),
+                      const SizedBox(height: 8),
+                      _champ(
+                        controller: _prixCtrl,
+                        hint: '12000',
+                        clavier: TextInputType.number,
+                        formatters: [FilteringTextInputFormatter.digitsOnly],
+                        validator: (v) {
+                          final prix = num.tryParse(v?.trim() ?? '');
+                          if (prix == null || prix <= 0) return 'Prix invalide';
+                          return null;
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _titre('Stock souhaité', obligatoire: true),
+                      const SizedBox(height: 8),
+                      _champ(
+                        controller: _stockCtrl,
+                        hint: '50',
+                        clavier: TextInputType.number,
+                        formatters: [FilteringTextInputFormatter.digitsOnly],
+                        validator: (v) {
+                          final stock = int.tryParse(v?.trim() ?? '');
+                          if (stock == null || stock <= 0) return 'Stock invalide';
+                          return null;
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'Le stock souhaité est une demande : l\'administration fixe la quantité '
+              'finalement mise en vente.',
+              style: TextStyle(fontSize: 11.5, color: VendeurCouleurs.gris, height: 1.35),
+            ),
+            const SizedBox(height: 22),
+            _titre('Message à l\'administration'),
+            const SizedBox(height: 4),
+            const Text(
+              'Facultatif — précisez ce qui peut aider à valider votre demande.',
+              style: TextStyle(fontSize: 12, color: VendeurCouleurs.gris),
+            ),
+            const SizedBox(height: 8),
+            _champ(
+              controller: _messageCtrl,
+              hint: 'Ex. Produit fabriqué localement, stock disponible immédiatement.',
+              lignes: 4,
+            ),
+            const SizedBox(height: 28),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _envoiEnCours ? null : _envoyer,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: VendeurCouleurs.bleu,
+                  foregroundColor: VendeurCouleurs.blanc,
+                  disabledBackgroundColor: VendeurCouleurs.bordure,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(vertical: 15),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
+                ),
+                child: _envoiEnCours
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      )
+                    : Text(
+                        _isEdit ? 'Renvoyer la demande' : 'Envoyer la demande',
+                        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+                      ),
               ),
-              child: _loading
-                  ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white))
-                  : Text(_isEdit ? 'Enregistrer' : 'Publier le produit',
-                      style: const TextStyle(fontWeight: FontWeight.w700)),
             ),
           ],
         ),
@@ -266,190 +326,202 @@ class _ProduitFormPageState extends State<ProduitFormPage> {
     );
   }
 
-  Widget _imagePicker() {
-    Widget content;
-    if (_imagePath != null) {
-      content = Image.file(File(_imagePath!), fit: BoxFit.cover);
-    } else if (_isEdit && widget.produit!.image.isNotEmpty) {
-      content = CachedNetworkImage(
-          imageUrl: widget.produit!.image, fit: BoxFit.cover);
-    } else {
-      content = const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+  // ── Blocs ─────────────────────────────────────────────────────────────
+  Widget _rappel() => Container(
+        padding: const EdgeInsets.all(13),
+        decoration: BoxDecoration(
+          color: VendeurCouleurs.bleuClair,
+          borderRadius: BorderRadius.circular(13),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(Icons.add_a_photo_outlined, color: _C.sub, size: 32),
-            SizedBox(height: 8),
-            Text('Ajouter une photo', style: TextStyle(color: _C.sub)),
+            const Icon(Icons.info_outline_rounded, size: 19, color: VendeurCouleurs.bleu),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                _isEdit
+                    ? 'La modification renvoie le produit en validation : il sera de '
+                        'nouveau relu avant d\'être publié.'
+                    : 'Vous préparez la fiche produit. Elle ne sera visible des clients '
+                        'qu\'après validation par l\'administration.',
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  color: VendeurCouleurs.bleu,
+                  height: 1.4,
+                ),
+              ),
+            ),
           ],
         ),
       );
-    }
-    return GestureDetector(
-      onTap: _choisirImage,
-      child: Container(
-        height: 170,
-        width: double.infinity,
-        decoration: BoxDecoration(
-          color: _C.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: _C.border),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: content,
-      ),
-    );
-  }
 
-  Widget _photosSupplementairesSection() {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: _C.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _C.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Expanded(
-                child: Text('Photos supplémentaires',
-                    style: TextStyle(
-                        fontWeight: FontWeight.w700, color: _C.black)),
-              ),
-              TextButton.icon(
-                onPressed: _uploadingImages ? null : _ajouterPhotosSupplementaires,
-                icon: _uploadingImages
-                    ? const SizedBox(
-                        height: 16,
-                        width: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.add_photo_alternate_outlined, size: 18),
-                label: const Text('Ajouter'),
-                style: TextButton.styleFrom(foregroundColor: _C.green),
-              ),
-            ],
+  Widget _titre(String texte, {bool obligatoire = false}) => RichText(
+        text: TextSpan(
+          text: texte,
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            color: VendeurCouleurs.noir,
           ),
-          const SizedBox(height: 8),
-          if (_imagesExistantes.isEmpty)
-            const Text('Aucune photo supplémentaire pour ce produit.',
-                style: TextStyle(color: _C.sub, fontSize: 13))
-          else
-            SizedBox(
-              height: 90,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                itemCount: _imagesExistantes.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 10),
-                itemBuilder: (context, i) {
-                  final img = _imagesExistantes[i];
-                  final suppression = _suppressionImageId == img.id;
-                  return Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: CachedNetworkImage(
-                          imageUrl: img.url,
-                          width: 90,
-                          height: 90,
-                          fit: BoxFit.cover,
-                          errorWidget: (_, __, ___) => Container(
-                            width: 90,
-                            height: 90,
-                            color: _C.bg,
-                            child: const Icon(Icons.image_not_supported_outlined,
-                                color: _C.sub),
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        top: -6,
-                        right: -6,
-                        child: GestureDetector(
-                          onTap: suppression ? null : () => _supprimerPhoto(img),
-                          child: CircleAvatar(
-                            radius: 12,
-                            backgroundColor: Colors.red,
-                            child: suppression
-                                ? const SizedBox(
-                                    height: 12,
-                                    width: 12,
-                                    child: CircularProgressIndicator(
-                                        strokeWidth: 1.5, color: Colors.white))
-                                : const Icon(Icons.close,
-                                    size: 14, color: Colors.white),
-                          ),
-                        ),
-                      ),
-                    ],
-                  );
-                },
+          children: obligatoire
+              ? const [TextSpan(text: ' *', style: TextStyle(color: VendeurCouleurs.rouge))]
+              : null,
+        ),
+      );
+
+  Widget _galerie() {
+    return SizedBox(
+      height: 96,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        children: [
+          if (_nbImages < _maxImages)
+            GestureDetector(
+              onTap: _ajouterPhotos,
+              child: Container(
+                width: 92,
+                margin: const EdgeInsets.only(right: 10),
+                decoration: BoxDecoration(
+                  color: VendeurCouleurs.blanc,
+                  borderRadius: BorderRadius.circular(13),
+                  border: Border.all(color: VendeurCouleurs.bordure, width: 1.4),
+                ),
+                child: const Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.add_a_photo_outlined, color: VendeurCouleurs.bleu, size: 22),
+                    SizedBox(height: 6),
+                    Text(
+                      'Ajouter',
+                      style: TextStyle(fontSize: 11, color: VendeurCouleurs.bleu),
+                    ),
+                  ],
+                ),
               ),
+            ),
+          for (final image in _imagesExistantes)
+            _vignette(
+              enfant: Image.network(image.url, fit: BoxFit.cover, width: 92, height: 92),
+              onSupprimer: () => setState(() => _imagesExistantes.remove(image)),
+            ),
+          for (final chemin in _nouvellesImages)
+            _vignette(
+              enfant: Image.file(File(chemin), fit: BoxFit.cover, width: 92, height: 92),
+              onSupprimer: () => setState(() => _nouvellesImages.remove(chemin)),
             ),
         ],
       ),
     );
   }
 
-  Widget _categoriePicker() {
-    if (_loadingCats) {
+  Widget _vignette({required Widget enfant, required VoidCallback onSupprimer}) => Container(
+        width: 92,
+        margin: const EdgeInsets.only(right: 10),
+        child: Stack(
+          children: [
+            ClipRRect(borderRadius: BorderRadius.circular(13), child: enfant),
+            Positioned(
+              top: 4,
+              right: 4,
+              child: GestureDetector(
+                onTap: onSupprimer,
+                child: Container(
+                  padding: const EdgeInsets.all(3),
+                  decoration: const BoxDecoration(
+                    color: Colors.black54,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.close_rounded, size: 14, color: Colors.white),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+
+  Widget _selecteurCategorie() {
+    if (_chargementCats) {
       return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 8),
-        child: LinearProgressIndicator(),
+        padding: EdgeInsets.symmetric(vertical: 12),
+        child: Center(child: CircularProgressIndicator()),
       );
     }
     if (_erreurCats != null) {
       return Row(
         children: [
-          const Expanded(child: Text('Catégories indisponibles')),
+          const Expanded(
+            child: Text(
+              'Catégories indisponibles',
+              style: TextStyle(fontSize: 12.5, color: VendeurCouleurs.rouge),
+            ),
+          ),
           TextButton(onPressed: _chargerCategories, child: const Text('Réessayer')),
         ],
       );
     }
-    return DropdownButtonFormField<String>(
-      initialValue: _categorieId,
-      isExpanded: true,
-      decoration: _decoration('Catégorie'),
-      items: _categories
-          .map((c) => DropdownMenuItem(value: c.id, child: Text(c.nom)))
-          .toList(),
-      onChanged: (v) => setState(() => _categorieId = v),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: VendeurCouleurs.blanc,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: VendeurCouleurs.bordure),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: _categorieId,
+          isExpanded: true,
+          hint: const Text(
+            'Choisir une catégorie',
+            style: TextStyle(fontSize: 13.5, color: VendeurCouleurs.gris),
+          ),
+          items: [
+            for (final c in _categories)
+              DropdownMenuItem(
+                value: c.id,
+                child: Text(c.nom, style: const TextStyle(fontSize: 13.5)),
+              ),
+          ],
+          onChanged: (v) => setState(() => _categorieId = v),
+        ),
+      ),
     );
   }
 
-  InputDecoration _decoration(String hint) => InputDecoration(
+  Widget _champ({
+    required TextEditingController controller,
+    required String hint,
+    int lignes = 1,
+    TextInputType? clavier,
+    List<TextInputFormatter>? formatters,
+    String? Function(String?)? validator,
+  }) {
+    return TextFormField(
+      controller: controller,
+      maxLines: lignes,
+      keyboardType: clavier,
+      inputFormatters: formatters,
+      validator: validator,
+      style: const TextStyle(fontSize: 13.5, color: VendeurCouleurs.noir),
+      decoration: InputDecoration(
         hintText: hint,
+        hintStyle: const TextStyle(fontSize: 13, color: VendeurCouleurs.gris),
         filled: true,
-        fillColor: _C.white,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        fillColor: VendeurCouleurs.blanc,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 13, vertical: 13),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: VendeurCouleurs.bordure),
+        ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: _C.border),
+          borderSide: const BorderSide(color: VendeurCouleurs.bordure),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: _C.green),
+          borderSide: const BorderSide(color: VendeurCouleurs.bleu, width: 1.4),
         ),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: _C.border),
-        ),
-      );
-
-  Widget _input(TextEditingController c, String hint,
-      {TextInputType? keyboard,
-      int maxLines = 1,
-      String? Function(String?)? validator}) {
-    return TextFormField(
-      controller: c,
-      keyboardType: keyboard,
-      maxLines: maxLines,
-      validator: validator,
-      decoration: _decoration(hint),
+      ),
     );
   }
 }

@@ -31,15 +31,6 @@ import 'package:yobante/features/compte/domain/usecases/forgot_password.dart';
 import 'package:yobante/features/compte/domain/usecases/reset_password.dart';
 import 'package:yobante/features/compte/domain/usecases/delete_account.dart';
 import 'package:yobante/features/compte/presentation/bloc/compte_bloc.dart';
-import 'package:yobante/features/boutique/data/datasources/boutique_remote_datasource.dart';
-import 'package:yobante/features/boutique/data/repositories/boutique_repository_impl.dart';
-import 'package:yobante/features/boutique/domain/repositories/boutique_repository.dart';
-import 'package:yobante/features/boutique/domain/usecases/get_ma_boutique.dart';
-import 'package:yobante/features/boutique/domain/usecases/creer_boutique.dart';
-import 'package:yobante/features/boutique/domain/usecases/modifier_boutique.dart';
-import 'package:yobante/features/boutique/domain/usecases/pause_boutique.dart';
-import 'package:yobante/features/boutique/domain/usecases/reactiver_boutique.dart';
-import 'package:yobante/features/boutique/presentation/bloc/boutique_bloc.dart';
 import 'package:yobante/features/abonnement/data/datasources/abonnement_remote_datasource.dart';
 import 'package:yobante/features/abonnement/data/repositories/abonnement_repository_impl.dart';
 import 'package:yobante/features/abonnement/domain/repositories/abonnement_repository.dart';
@@ -351,32 +342,6 @@ Future<void> init() async {
     forgotPassword: sl(),
     resetPassword: sl(),
     deleteAccount: sl(),
-  ));
-
-  //================================================
-  // FEATURES - BOUTIQUE (vendeur)
-  //================================================
-
-  sl.registerLazySingleton<BoutiqueRemoteDataSource>(
-        () => BoutiqueRemoteDataSourceImpl(sl()),
-  );
-
-  sl.registerLazySingleton<BoutiqueRepository>(
-        () => BoutiqueRepositoryImpl(remoteDataSource: sl()),
-  );
-
-  sl.registerLazySingleton(() => GetMaBoutique(sl()));
-  sl.registerLazySingleton(() => CreerBoutique(sl()));
-  sl.registerLazySingleton(() => ModifierBoutique(sl()));
-  sl.registerLazySingleton(() => PauseBoutique(sl()));
-  sl.registerLazySingleton(() => ReactiverBoutique(sl()));
-
-  sl.registerFactory(() => BoutiqueBloc(
-    getMaBoutique: sl(),
-    creerBoutique: sl(),
-    modifierBoutique: sl(),
-    pauseBoutique: sl(),
-    reactiverBoutique: sl(),
   ));
 
   //================================================

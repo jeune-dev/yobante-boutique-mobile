@@ -1,12 +1,12 @@
-import 'package:dio/dio.dart';
+﻿import 'package:dio/dio.dart';
 import '../../../home/data/models/produit_model.dart';
 import '../models/categorie_model.dart';
 import '../models/vendeur_commande_model.dart';
 import '../models/vendeur_ventes_model.dart';
 import '../../../../core/constants/api_endpoints.dart';
 
-/// Accès aux endpoints VENDEUR de gestion des produits (API Yobante, endpoints vendeur).
-/// Le token est ajouté automatiquement par l'intercepteur du Dio partagé.
+/// AccÃ¨s aux endpoints VENDEUR de gestion des produits (API Yobante, endpoints vendeur).
+/// Le token est ajoutÃ© automatiquement par l'intercepteur du Dio partagÃ©.
 class VendeurProduitDataSource {
   final Dio dio;
   VendeurProduitDataSource(this.dio);
@@ -14,7 +14,7 @@ class VendeurProduitDataSource {
   List<dynamic> _extractList(dynamic raw) {
     if (raw is List) return raw;
     if (raw is Map) {
-      // Le backend enveloppe dans `data`, puis dans une clé nommée.
+      // Le backend enveloppe dans `data`, puis dans une clÃ© nommÃ©e.
       final data = raw['data'];
       if (data is List) return data;
       if (data is Map) {
@@ -29,7 +29,7 @@ class VendeurProduitDataSource {
     return const [];
   }
 
-  /// Normalise une réponse "objet" du backend : les routes répondent
+  /// Normalise une rÃ©ponse "objet" du backend : les routes rÃ©pondent
   /// `{ success, message, data: { <cle>: {...} } }`.
   Map<String, dynamic> _extractMap(dynamic raw, String cle) {
     if (raw is! Map) return const {};
@@ -58,14 +58,15 @@ class VendeurProduitDataSource {
         .toList();
   }
 
-  /// Soumet un produit à la validation de l'administration.
-  /// `stockAlloue` est le stock que le vendeur demande à se voir allouer.
+  /// Soumet un produit Ã  la validation de l'administration.
+  /// `stockAlloue` est le stock que le vendeur demande Ã  se voir allouer.
   Future<void> ajouterProduit({
     required String nom,
     required String description,
     required num prix,
     required int stockAlloue,
     required String categorieId,
+    String? messageVendeur,
     List<String> imagePaths = const [],
   }) async {
     final form = FormData.fromMap({
@@ -74,6 +75,8 @@ class VendeurProduitDataSource {
       'prix': prix,
       'stockAlloue': stockAlloue,
       'categorieId': categorieId,
+      if (messageVendeur != null && messageVendeur.isNotEmpty)
+        'messageVendeur': messageVendeur,
       if (imagePaths.isNotEmpty)
         'images': [
           for (final path in imagePaths) await MultipartFile.fromFile(path),
@@ -83,7 +86,7 @@ class VendeurProduitDataSource {
   }
 
   /// Modifie un produit. Toute modification le renvoie en attente de validation.
-  /// Fournir `imagePaths` remplace l'intégralité des images existantes.
+  /// Fournir `imagePaths` remplace l'intÃ©gralitÃ© des images existantes.
   Future<void> modifierProduit({
     required String id,
     String? nom,
@@ -91,6 +94,7 @@ class VendeurProduitDataSource {
     num? prix,
     int? stockAlloue,
     String? categorieId,
+    String? messageVendeur,
     List<String> imagePaths = const [],
   }) async {
     final form = FormData.fromMap({
@@ -99,6 +103,8 @@ class VendeurProduitDataSource {
       if (prix != null) 'prix': prix,
       if (stockAlloue != null) 'stockAlloue': stockAlloue,
       if (categorieId != null) 'categorieId': categorieId,
+      if (messageVendeur != null && messageVendeur.isNotEmpty)
+        'messageVendeur': messageVendeur,
       if (imagePaths.isNotEmpty)
         'images': [
           for (final path in imagePaths) await MultipartFile.fromFile(path),
@@ -118,15 +124,15 @@ class VendeurProduitDataSource {
     });
   }
 
-  // ── Tableau de bord ───────────────────────────────────────────────────
+  // â”€â”€ Tableau de bord â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-  /// Compteurs du catalogue : total, validés, en attente, rejetés, ruptures.
+  /// Compteurs du catalogue : total, validÃ©s, en attente, rejetÃ©s, ruptures.
   Future<Map<String, dynamic>> statsProduits() async {
     final res = await dio.get(VendeurDashboardEndpoints.statsProduits);
     return _extractMap(res.data, 'stats');
   }
 
-  /// Agrégats de ventes : CA, unités, top produits, série journalière.
+  /// AgrÃ©gats de ventes : CA, unitÃ©s, top produits, sÃ©rie journaliÃ¨re.
   Future<VendeurVentesModel> ventes({int jours = 30}) async {
     final res = await dio.get(
       VendeurCommandeEndpoints.ventes,
@@ -150,3 +156,4 @@ class VendeurProduitDataSource {
     return VendeurCommandeModel.fromJson(_extractMap(res.data, 'commande'));
   }
 }
+

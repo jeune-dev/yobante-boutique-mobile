@@ -29,6 +29,19 @@ class DemandePublicationPage extends StatelessWidget {
 class _DemandeVue extends StatelessWidget {
   const _DemandeVue();
 
+  Future<void> _corriger(BuildContext context, ProduitModel produit) async {
+    final bloc = context.read<VendeurProduitBloc>();
+    final renvoye = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => ProduitFormPage(produit: produit)),
+    );
+    if (renvoye != true) return;
+    bloc.add(LoadMesProduits());
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Demande renvoyée en validation')),
+    );
+  }
+
   Future<void> _nouvelleDemande(BuildContext context) async {
     final bloc = context.read<VendeurProduitBloc>();
     final envoye = await Navigator.of(context).push<bool>(
@@ -194,7 +207,14 @@ class _DemandeVue extends StatelessWidget {
         for (final demande in demandes)
           Padding(
             padding: const EdgeInsets.only(bottom: 12),
-            child: _CarteDemande(produit: demande),
+            child: _CarteDemande(
+              produit: demande,
+              // Une demande rejetée doit pouvoir être corrigée : on rouvre le
+              // formulaire pré-rempli, et le renvoi la remet en attente.
+              onModifier: demande.statutValidation == 'rejete'
+                  ? () => _corriger(context, demande)
+                  : null,
+            ),
           ),
       ];
     }
@@ -204,7 +224,8 @@ class _DemandeVue extends StatelessWidget {
 
 class _CarteDemande extends StatelessWidget {
   final ProduitModel produit;
-  const _CarteDemande({required this.produit});
+  final VoidCallback? onModifier;
+  const _CarteDemande({required this.produit, this.onModifier});
 
   /// Position de la demande dans le parcours de validation.
   int get _etape {
@@ -222,7 +243,9 @@ class _CarteDemande extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return GestureDetector(
+      onTap: onModifier,
+      child: Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: VendeurCouleurs.blanc,
@@ -278,15 +301,55 @@ class _CarteDemande extends StatelessWidget {
                 color: VendeurCouleurs.rouge.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: const Text(
-                'Demande rejetée. Modifiez la fiche puis renvoyez-la pour une '
-                'nouvelle validation.',
-                style: TextStyle(fontSize: 12, color: VendeurCouleurs.rouge, height: 1.35),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Motif saisi par l'administration au moment du refus ; à
+                  // défaut, on reste sur une consigne générique.
+                  Text(
+                    produit.motifRejet.isNotEmpty
+                        ? produit.motifRejet
+                        : 'Demande rejetée, sans motif précisé.',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: VendeurCouleurs.rouge,
+                      height: 1.35,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Modifiez la fiche puis renvoyez-la pour une nouvelle validation.',
+                    style: TextStyle(fontSize: 11.5, color: VendeurCouleurs.gris, height: 1.35),
+                  ),
+                ],
               ),
             )
           else
             _progression(),
+          if (produit.messageVendeur.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.chat_bubble_outline_rounded,
+                    size: 14, color: VendeurCouleurs.gris),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'Votre message : ${produit.messageVendeur}',
+                    style: const TextStyle(
+                      fontSize: 11.5,
+                      color: VendeurCouleurs.gris,
+                      height: 1.35,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
+      ),
       ),
     );
   }
