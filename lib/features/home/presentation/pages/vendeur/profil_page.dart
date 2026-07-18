@@ -247,23 +247,46 @@ class _ProfilPageState extends State<ProfilPage>
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      RichText(
-                        text: TextSpan(children: [
-                          TextSpan(
-                            text: 'Mon ',
-                            style: GoogleFonts.sora(
-                              fontSize: 18, fontWeight: FontWeight.w800,
-                              color: _C.white, letterSpacing: -0.5,
+                      Row(
+                        children: [
+                          // Retour affiché seulement si la page a été empilée :
+                          // elle s'ouvre depuis l'avatar de l'entête vendeur.
+                          if (Navigator.of(context).canPop())
+                            GestureDetector(
+                              onTap: () => Navigator.of(context).pop(),
+                              child: Container(
+                                width: 36, height: 36,
+                                margin: const EdgeInsets.only(right: 12),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.08),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: Colors.white.withOpacity(0.12),
+                                  ),
+                                ),
+                                child: const Icon(Icons.arrow_back_ios_new_rounded,
+                                    color: _C.white, size: 15),
+                              ),
                             ),
+                          RichText(
+                            text: TextSpan(children: [
+                              TextSpan(
+                                text: 'Mon ',
+                                style: GoogleFonts.sora(
+                                  fontSize: 18, fontWeight: FontWeight.w800,
+                                  color: _C.white, letterSpacing: -0.5,
+                                ),
+                              ),
+                              TextSpan(
+                                text: 'Profil',
+                                style: GoogleFonts.sora(
+                                  fontSize: 18, fontWeight: FontWeight.w800,
+                                  color: _C.green, letterSpacing: -0.5,
+                                ),
+                              ),
+                            ]),
                           ),
-                          TextSpan(
-                            text: 'Profil',
-                            style: GoogleFonts.sora(
-                              fontSize: 18, fontWeight: FontWeight.w800,
-                              color: _C.green, letterSpacing: -0.5,
-                            ),
-                          ),
-                        ]),
+                        ],
                       ),
                       GestureDetector(
                         onTap: _onEditProfil,

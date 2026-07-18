@@ -188,7 +188,14 @@ class _ProduitFormPageState extends State<ProduitFormPage> {
       body: Form(
         key: _formKey,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+          // On ajoute l'inset système au bas : sans lui, le bouton d'envoi
+          // passe sous la barre de navigation gestuelle du téléphone.
+          padding: EdgeInsets.fromLTRB(
+            16,
+            16,
+            16,
+            32 + MediaQuery.of(context).padding.bottom,
+          ),
           children: [
             _rappel(),
             const SizedBox(height: 20),
