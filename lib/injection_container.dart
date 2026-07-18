@@ -19,11 +19,7 @@ import 'package:yobante/features/vendeur/domain/usecases/get_categories_vendeur.
 import 'package:yobante/features/vendeur/domain/usecases/ajouter_produit.dart';
 import 'package:yobante/features/vendeur/domain/usecases/modifier_produit.dart';
 import 'package:yobante/features/vendeur/domain/usecases/supprimer_produit.dart';
-import 'package:yobante/features/vendeur/domain/usecases/toggle_disponibilite_produit.dart';
-import 'package:yobante/features/vendeur/domain/usecases/dupliquer_produit.dart';
-import 'package:yobante/features/vendeur/domain/usecases/ajouter_images_produit.dart';
-import 'package:yobante/features/vendeur/domain/usecases/supprimer_image_produit.dart';
-import 'package:yobante/features/vendeur/domain/usecases/get_vendeur_dashboard.dart';
+import 'package:yobante/features/vendeur/domain/usecases/get_vendeur_tableau_bord.dart';
 import 'package:yobante/features/vendeur/presentation/bloc/vendeur_produit_bloc.dart';
 import 'package:yobante/features/compte/data/datasources/compte_remote_datasource.dart';
 import 'package:yobante/features/compte/data/repositories/compte_repository_impl.dart';
@@ -322,16 +318,11 @@ Future<void> init() async {
   sl.registerLazySingleton(() => AjouterProduitUsecase(sl()));
   sl.registerLazySingleton(() => ModifierProduitUsecase(sl()));
   sl.registerLazySingleton(() => SupprimerProduitUsecase(sl()));
-  sl.registerLazySingleton(() => ToggleDisponibiliteProduitUsecase(sl()));
-  sl.registerLazySingleton(() => DupliquerProduitUsecase(sl()));
-  sl.registerLazySingleton(() => AjouterImagesProduitUsecase(sl()));
-  sl.registerLazySingleton(() => SupprimerImageProduitUsecase(sl()));
-  sl.registerLazySingleton(() => GetVendeurDashboard(sl()));
+  sl.registerLazySingleton(() => GetVendeurTableauBord(sl()));
 
   sl.registerFactory(() => VendeurProduitBloc(
     getMesProduits: sl(),
     supprimerProduit: sl(),
-    toggleDisponibilite: sl(),
   ));
 
   //================================================

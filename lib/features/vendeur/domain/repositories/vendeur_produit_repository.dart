@@ -2,22 +2,26 @@ import 'package:dartz/dartz.dart';
 
 import '../../../../core/errors/failure.dart';
 import '../../data/models/categorie_model.dart';
+import '../../data/models/vendeur_commande_model.dart';
+import '../../data/models/vendeur_ventes_model.dart';
 import '../entities/produit_vendeur.dart';
 
-/// Contrat du domaine pour la gestion des produits + dashboard côté vendeur.
+/// Contrat du domaine pour la gestion des produits, des commandes et du
+/// tableau de bord côté vendeur.
 abstract class VendeurProduitRepository {
-  Future<Either<Failure, List<ProduitVendeur>>> mesProduits();
+  /// `statut` filtre sur `statutValidation` : en_attente, valide, rejete.
+  Future<Either<Failure, List<ProduitVendeur>>> mesProduits({String? statut});
 
   Future<Either<Failure, List<CategorieModel>>> categories();
 
+  /// Soumet une demande de publication. Le produit part en `en_attente`.
   Future<Either<Failure, void>> ajouterProduit({
     required String nom,
     required String description,
     required num prix,
-    required int quantite,
+    required int stockAlloue,
     required String categorieId,
-    String? delaiPreparation,
-    String? imagePath,
+    List<String> imagePaths,
   });
 
   Future<Either<Failure, void>> modifierProduit({
@@ -25,36 +29,22 @@ abstract class VendeurProduitRepository {
     String? nom,
     String? description,
     num? prix,
-    int? quantite,
+    int? stockAlloue,
     String? categorieId,
-    String? delaiPreparation,
-    String? imagePath,
+    List<String> imagePaths,
   });
 
   Future<Either<Failure, void>> supprimerProduit(String id);
 
-  Future<Either<Failure, void>> toggleDisponibilite(String id);
+  Future<Either<Failure, void>> majStock(String id, {int? stock, int? stockAlloue});
 
-  Future<Either<Failure, void>> dupliquerProduit(String id);
+  // ── Tableau de bord ───────────────────────────────────────────────────
 
-  Future<Either<Failure, void>> ajouterImages(
-      String produitId, List<String> imagePaths);
+  Future<Either<Failure, Map<String, dynamic>>> statsProduits();
 
-  Future<Either<Failure, void>> supprimerImage(
-      String produitId, String imageId);
+  Future<Either<Failure, VendeurVentesModel>> ventes({int jours});
 
-  // ── Dashboard / statistiques ──────────────────────────────────────────
+  Future<Either<Failure, List<VendeurCommandeModel>>> mesCommandes({String? statut});
 
-  Future<Either<Failure, Map<String, dynamic>>> dashboard();
-
-  Future<Either<Failure, Map<String, dynamic>>> statistiques();
-
-  Future<Either<Failure, Map<String, dynamic>>> statistiquesVues();
-
-  Future<Either<Failure, Map<String, dynamic>>> nombreProduit();
-
-  Future<Either<Failure, Map<String, dynamic>>> nombreProduitCategorie();
-
-  Future<Either<Failure, List<ProduitVendeur>>> rechercheProduits(
-      String recherche);
+  Future<Either<Failure, VendeurCommandeModel>> commande(String id);
 }

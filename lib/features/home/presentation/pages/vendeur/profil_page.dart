@@ -17,7 +17,7 @@ import '../../../../avis/presentation/pages/avis_recus_page.dart';
 import '../../../../promotions/presentation/pages/mes_promotions_page.dart';
 import '../../../../notifications/presentation/pages/notifications_page.dart';
 import '../../../../messagerie/presentation/pages/conversations_page.dart';
-import '../../../../vendeur/domain/usecases/get_vendeur_dashboard.dart';
+import '../../../../vendeur/domain/usecases/get_vendeur_tableau_bord.dart';
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
 class _C {
@@ -81,15 +81,14 @@ class _ProfilPageState extends State<ProfilPage>
 
   Future<void> _loadStats() async {
     try {
-      final result = await sl<GetVendeurDashboard>().statistiques();
+      final result = await sl<GetVendeurTableauBord>().statsProduits();
       if (!mounted) return;
       result.fold(
         (_) {},
         (stats) => setState(() {
-          _nbProduits = (stats['nombreProduits'] as num?)?.toInt() ?? 0;
-          _nbFavoris  = (stats['nombreFavoris']  as num?)?.toInt() ?? 0;
-          final note  = stats['noteMoyenne'];
-          _note       = note == null ? '—' : note.toString();
+          _nbProduits = (stats['total'] as num?)?.toInt() ?? 0;
+          _nbFavoris  = (stats['enAttente'] as num?)?.toInt() ?? 0;
+          _note       = ((stats['valides'] as num?)?.toInt() ?? 0).toString();
         }),
       );
     } catch (_) {/* on garde les valeurs par défaut */}

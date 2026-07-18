@@ -3,7 +3,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../home/data/models/produit_model.dart';
 import '../../domain/usecases/get_mes_produits.dart';
 import '../../domain/usecases/supprimer_produit.dart';
-import '../../domain/usecases/toggle_disponibilite_produit.dart';
 
 // ───── Events ─────
 abstract class VendeurProduitEvent extends Equatable {
@@ -11,18 +10,17 @@ abstract class VendeurProduitEvent extends Equatable {
   List<Object?> get props => [];
 }
 
-class LoadMesProduits extends VendeurProduitEvent {}
+/// `statut` null = tous les produits ; sinon en_attente / valide / rejete.
+class LoadMesProduits extends VendeurProduitEvent {
+  final String? statut;
+  LoadMesProduits({this.statut});
+  @override
+  List<Object?> get props => [statut];
+}
 
 class SupprimerProduit extends VendeurProduitEvent {
   final String id;
   SupprimerProduit(this.id);
-  @override
-  List<Object?> get props => [id];
-}
-
-class ToggleDispoProduit extends VendeurProduitEvent {
-  final String id;
-  ToggleDispoProduit(this.id);
   @override
   List<Object?> get props => [id];
 }
@@ -53,20 +51,21 @@ class VendeurProduitError extends VendeurProduitState {
 class VendeurProduitBloc extends Bloc<VendeurProduitEvent, VendeurProduitState> {
   final GetMesProduits getMesProduits;
   final SupprimerProduitUsecase supprimerProduit;
-  final ToggleDisponibiliteProduitUsecase toggleDisponibilite;
+
+  /// Dernier filtre appliqué, réutilisé après une suppression pour rester
+  /// sur le même onglet.
+  String? _statutCourant;
 
   VendeurProduitBloc({
     required this.getMesProduits,
     required this.supprimerProduit,
-    required this.toggleDisponibilite,
   }) : super(VendeurProduitLoading()) {
     on<LoadMesProduits>(_onLoad);
     on<SupprimerProduit>(_onSupprimer);
-    on<ToggleDispoProduit>(_onToggle);
   }
 
   Future<void> _reloadOrError(Emitter<VendeurProduitState> emit) async {
-    final result = await getMesProduits();
+    final result = await getMesProduits(statut: _statutCourant);
     result.fold(
       (failure) => emit(VendeurProduitError(failure.errorMessage)),
       (produits) => emit(VendeurProduitLoaded(produits)),
@@ -74,20 +73,13 @@ class VendeurProduitBloc extends Bloc<VendeurProduitEvent, VendeurProduitState> 
   }
 
   Future<void> _onLoad(LoadMesProduits event, Emitter<VendeurProduitState> emit) async {
+    _statutCourant = event.statut;
     emit(VendeurProduitLoading());
     await _reloadOrError(emit);
   }
 
   Future<void> _onSupprimer(SupprimerProduit event, Emitter<VendeurProduitState> emit) async {
     final result = await supprimerProduit(event.id);
-    await result.fold(
-      (failure) async => emit(VendeurProduitError(failure.errorMessage)),
-      (_) => _reloadOrError(emit),
-    );
-  }
-
-  Future<void> _onToggle(ToggleDispoProduit event, Emitter<VendeurProduitState> emit) async {
-    final result = await toggleDisponibilite(event.id);
     await result.fold(
       (failure) async => emit(VendeurProduitError(failure.errorMessage)),
       (_) => _reloadOrError(emit),

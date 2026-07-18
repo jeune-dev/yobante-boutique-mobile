@@ -173,18 +173,14 @@ class _MesProduitsView extends StatelessWidget {
                               _ouvrirForm(context, produit: p);
                             } else if (v == 'delete') {
                               _confirmerSuppression(context, bloc, p.id);
-                            } else if (v == 'toggle') {
-                              bloc.add(ToggleDispoProduit(p.id));
                             }
                           },
+                          // Pas de bascule de disponibilité : le backend ne
+                          // l'expose pas. Le retrait passe par « Supprimer »,
+                          // qui désactive le produit.
                           itemBuilder: (_) => [
                             const PopupMenuItem(
                                 value: 'edit', child: Text('Modifier')),
-                            PopupMenuItem(
-                                value: 'toggle',
-                                child: Text(p.disponible
-                                    ? 'Rendre indisponible'
-                                    : 'Rendre disponible')),
                             const PopupMenuItem(
                                 value: 'delete', child: Text('Supprimer')),
                           ],

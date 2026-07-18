@@ -66,18 +66,13 @@ class CommandeEndpoints {
 class VendeurProduitEndpoints {
   VendeurProduitEndpoints._();
 
-  static const listeProduits = '/vendeur/liste-produits';
+  static const listeProduits = '/vendeur/produits';
   static const categories = '/categories';
-  static const ajouterProduit = '/vendeur/ajout-produit';
-  static String modifierProduit(String id) =>
-      '/vendeur/modifier-produit/$id';
-  static String supprimerProduit(String id) =>
-      '/vendeur/supprimer-produit/$id';
-  static String disponibilite(String id) => '/vendeur/produit/$id/disponibilite';
-  static String dupliquer(String id) => '/vendeur/produit/$id/dupliquer';
-  static String images(String id) => '/vendeur/produit/$id/images';
-  static String image(String id, String imageId) =>
-      '/vendeur/produit/$id/images/$imageId';
+  static const ajouterProduit = '/vendeur/produits';
+  static String produit(String id) => '/vendeur/produits/$id';
+  static String modifierProduit(String id) => '/vendeur/produits/$id';
+  static String supprimerProduit(String id) => '/vendeur/produits/$id';
+  static String stock(String id) => '/vendeur/produits/$id/stock';
 }
 
 /// Compte utilisateur (profil connecté, mot de passe).
@@ -186,14 +181,18 @@ class SignalementsEndpoints {
   static const mesSignalements = '/signalements/mes-signalements';
 }
 
-/// Dashboard / statistiques vendeur.
+/// Commandes et ventes du vendeur.
+class VendeurCommandeEndpoints {
+  VendeurCommandeEndpoints._();
+
+  static const commandes = '/vendeur/commandes';
+  static const ventes = '/vendeur/commandes/ventes';
+  static String commande(String id) => '/vendeur/commandes/$id';
+}
+
+/// Statistiques catalogue du vendeur (compteurs de produits par statut).
 class VendeurDashboardEndpoints {
   VendeurDashboardEndpoints._();
 
-  static const dashboard = '/vendeur/dashboard';
-  static const statistiques = '/vendeur/statistiques';
-  static const statistiquesVues = '/vendeur/statistiques-vues';
-  static const nombreProduit = '/vendeur/nombre-produit';
-  static const nombreProduitCategorie = '/vendeur/nombre-produit-categorie';
-  static const rechercheProduits = '/vendeur/recherche-produits';
+  static const statsProduits = '/vendeur/produits/stats';
 }

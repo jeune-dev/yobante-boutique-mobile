@@ -15,7 +15,7 @@ import '../../../../../core/services/token_service.dart';
 import '../../../../../injection_container.dart';
 import '../../../../../core/services/whatsapp_service.dart';
 import '../../../../../core/utils/app_logger.dart';
-import '../../../../vendeur/domain/usecases/get_vendeur_dashboard.dart';
+import '../../../../vendeur/domain/usecases/get_vendeur_tableau_bord.dart';
 import '../../../../compte/presentation/bloc/compte_bloc.dart';
 import '../../../../compte/presentation/bloc/compte_event.dart';
 import '../../../../compte/presentation/bloc/compte_state.dart';
@@ -133,16 +133,15 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   Future<void> _loadStats() async {
     setState(() => _loading = true);
     try {
-      // Vraies statistiques du vendeur : GET /vendeurs/statistiques
-      final result = await sl<GetVendeurDashboard>().statistiques();
+      // Compteurs du catalogue : GET /vendeur/produits/stats
+      final result = await sl<GetVendeurTableauBord>().statsProduits();
       if (!mounted) return;
       result.fold(
         (_) => setState(() => _loading = false),
         (stats) => setState(() {
-          _nbProduits = (stats['nombreProduits'] as num?)?.toInt() ?? 0;
-          _nbFavoris  = (stats['nombreFavoris']  as num?)?.toInt() ?? 0;
-          final note  = stats['noteMoyenne'];
-          _note       = note == null ? '—' : note.toString();
+          _nbProduits = (stats['total'] as num?)?.toInt() ?? 0;
+          _nbFavoris  = (stats['enAttente'] as num?)?.toInt() ?? 0;
+          _note       = ((stats['valides'] as num?)?.toInt() ?? 0).toString();
           _loading    = false;
         }),
       );

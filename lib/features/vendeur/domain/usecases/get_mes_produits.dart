@@ -8,6 +8,7 @@ class GetMesProduits {
   final VendeurProduitRepository repository;
   GetMesProduits(this.repository);
 
-  Future<Either<Failure, List<ProduitVendeur>>> call() =>
-      repository.mesProduits();
+  /// `statut` filtre sur le statut de validation (en_attente, valide, rejete).
+  Future<Either<Failure, List<ProduitVendeur>>> call({String? statut}) =>
+      repository.mesProduits(statut: statut);
 }

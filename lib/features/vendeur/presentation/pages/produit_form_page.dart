@@ -40,10 +40,21 @@ class _ProduitFormPageState extends State<ProduitFormPage> {
   bool _loadingCats = true;
   String? _erreurCats;
 
-  // ── Galerie multi-images (mode édition uniquement) ────────────────────
+  // ── Galerie multi-images ──────────────────────────────────────────────
+  // Le backend n'expose pas d'ajout/suppression d'image à l'unité : un envoi
+  // d'images sur POST/PUT remplace l'intégralité de la galerie. On accumule
+  // donc les choix localement et on les applique à l'enregistrement.
   late List<ProduitImage> _imagesExistantes;
+  final List<String> _nouvellesImages = [];
   bool _uploadingImages = false;
   String? _suppressionImageId;
+
+  /// Images envoyées au backend : la sélection locale si elle existe, sinon
+  /// rien (les images actuelles sont alors conservées côté serveur).
+  List<String> get _imagesAEnvoyer => [
+        if (_imagePath != null) _imagePath!,
+        ..._nouvellesImages,
+      ];
 
   bool get _isEdit => widget.produit != null;
 
@@ -127,44 +138,26 @@ class _ProduitFormPageState extends State<ProduitFormPage> {
     final fichiers =
         await picker.pickMultiImage(imageQuality: 80, maxWidth: 1200);
     if (fichiers.isEmpty) return;
-    setState(() => _uploadingImages = true);
-    try {
-      await _ds.ajouterImages(
-          widget.produit!.id, fichiers.map((f) => f.path).toList());
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Photos ajoutées')),
-      );
-      // Le produit rafraîchi n'est pas re-fetch ici (pas de usecase dédié
-      // dans cet écran) : on affiche un message de succès, la liste sera
-      // à jour à la prochaine ouverture / rechargement de "Mes produits".
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erreur upload : $e'), backgroundColor: Colors.red),
-      );
-    } finally {
-      if (mounted) setState(() => _uploadingImages = false);
-    }
+    setState(() {
+      _nouvellesImages.addAll(fichiers.map((f) => f.path));
+      _uploadingImages = false;
+    });
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Photos ajoutées — elles remplaceront la galerie à l\'enregistrement'),
+      ),
+    );
   }
 
-  Future<void> _supprimerPhoto(ProduitImage image) async {
+  /// Retire une image existante de la galerie. La suppression n'est effective
+  /// côté serveur qu'à l'enregistrement, qui réenvoie la galerie complète.
+  void _supprimerPhoto(ProduitImage image) {
     if (!_isEdit) return;
-    setState(() => _suppressionImageId = image.id);
-    try {
-      await _ds.supprimerImage(widget.produit!.id, image.id);
-      if (!mounted) return;
-      setState(() {
-        _imagesExistantes.removeWhere((i) => i.id == image.id);
-      });
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erreur : $e'), backgroundColor: Colors.red),
-      );
-    } finally {
-      if (mounted) setState(() => _suppressionImageId = null);
-    }
+    setState(() {
+      _imagesExistantes.removeWhere((i) => i.id == image.id);
+      _suppressionImageId = null;
+    });
   }
 
   Future<void> _soumettre() async {
@@ -178,27 +171,27 @@ class _ProduitFormPageState extends State<ProduitFormPage> {
     setState(() => _loading = true);
     try {
       final prix = num.tryParse(_prixCtrl.text.trim()) ?? 0;
-      // Quantité non gérée par le vendeur (champ retiré) : produit disponible
-      // par défaut. En édition, on conserve la quantité existante.
-      final qte = int.tryParse(_qteCtrl.text.trim()) ?? 999;
+      // Stock demandé par le vendeur : c'est l'administration qui décide du
+      // stock finalement alloué lors de la validation.
+      final stockDemande = int.tryParse(_qteCtrl.text.trim()) ?? 0;
       if (_isEdit) {
         await _ds.modifierProduit(
           id: widget.produit!.id,
           nom: _nomCtrl.text.trim(),
           description: _descCtrl.text.trim(),
           prix: prix,
-          quantite: qte,
+          stockAlloue: stockDemande,
           categorieId: _categorieId,
-          imagePath: _imagePath,
+          imagePaths: _imagesAEnvoyer,
         );
       } else {
         await _ds.ajouterProduit(
           nom: _nomCtrl.text.trim(),
           description: _descCtrl.text.trim(),
           prix: prix,
-          quantite: qte,
+          stockAlloue: stockDemande,
           categorieId: _categorieId!,
-          imagePath: _imagePath,
+          imagePaths: _imagesAEnvoyer,
         );
       }
       if (!mounted) return;

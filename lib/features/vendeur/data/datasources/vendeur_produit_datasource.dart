@@ -1,6 +1,8 @@
 import 'package:dio/dio.dart';
 import '../../../home/data/models/produit_model.dart';
 import '../models/categorie_model.dart';
+import '../models/vendeur_commande_model.dart';
+import '../models/vendeur_ventes_model.dart';
 import '../../../../core/constants/api_endpoints.dart';
 
 /// Accès aux endpoints VENDEUR de gestion des produits (API Yobante, endpoints vendeur).
@@ -12,28 +14,38 @@ class VendeurProduitDataSource {
   List<dynamic> _extractList(dynamic raw) {
     if (raw is List) return raw;
     if (raw is Map) {
-      // 'categories' était absent → le menu déroulant restait vide.
-      for (final k in ['produits', 'categories', 'data', 'items', 'results']) {
+      // Le backend enveloppe dans `data`, puis dans une clé nommée.
+      final data = raw['data'];
+      if (data is List) return data;
+      if (data is Map) {
+        for (final k in ['produits', 'categories', 'commandes', 'items']) {
+          if (data[k] is List) return data[k] as List;
+        }
+      }
+      for (final k in ['produits', 'categories', 'commandes', 'data', 'items', 'results']) {
         if (raw[k] is List) return raw[k] as List;
       }
     }
     return const [];
   }
 
-  /// Normalise une réponse "objet" du backend : certaines routes enveloppent
-  /// le payload dans `data`, d'autres le renvoient tel quel.
-  Map<String, dynamic> _extractMap(dynamic raw) {
-    if (raw is Map<String, dynamic>) {
-      final data = raw['data'];
-      if (data is Map<String, dynamic>) return data;
-      return raw;
+  /// Normalise une réponse "objet" du backend : les routes répondent
+  /// `{ success, message, data: { <cle>: {...} } }`.
+  Map<String, dynamic> _extractMap(dynamic raw, String cle) {
+    if (raw is! Map) return const {};
+    final data = raw['data'];
+    if (data is Map && data[cle] is Map) {
+      return Map<String, dynamic>.from(data[cle] as Map);
     }
-    if (raw is Map) return Map<String, dynamic>.from(raw);
-    return const {};
+    if (data is Map<String, dynamic>) return data;
+    return Map<String, dynamic>.from(raw);
   }
 
-  Future<List<ProduitModel>> mesProduits() async {
-    final res = await dio.get(VendeurProduitEndpoints.listeProduits);
+  Future<List<ProduitModel>> mesProduits({String? statut}) async {
+    final res = await dio.get(
+      VendeurProduitEndpoints.listeProduits,
+      queryParameters: {if (statut != null) 'statut': statut},
+    );
     return _extractList(res.data)
         .map((e) => ProduitModel.fromJson(e as Map<String, dynamic>))
         .toList();
@@ -46,47 +58,51 @@ class VendeurProduitDataSource {
         .toList();
   }
 
+  /// Soumet un produit à la validation de l'administration.
+  /// `stockAlloue` est le stock que le vendeur demande à se voir allouer.
   Future<void> ajouterProduit({
     required String nom,
     required String description,
     required num prix,
-    required int quantite,
+    required int stockAlloue,
     required String categorieId,
-    String? delaiPreparation,
-    String? imagePath,
+    List<String> imagePaths = const [],
   }) async {
     final form = FormData.fromMap({
       'nom': nom,
       'description': description,
       'prix': prix,
-      'quantite': quantite,
+      'stockAlloue': stockAlloue,
       'categorieId': categorieId,
-      if (delaiPreparation != null && delaiPreparation.isNotEmpty)
-        'delai_preparation': delaiPreparation,
-      if (imagePath != null)
-        'image': await MultipartFile.fromFile(imagePath),
+      if (imagePaths.isNotEmpty)
+        'images': [
+          for (final path in imagePaths) await MultipartFile.fromFile(path),
+        ],
     });
     await dio.post(VendeurProduitEndpoints.ajouterProduit, data: form);
   }
 
+  /// Modifie un produit. Toute modification le renvoie en attente de validation.
+  /// Fournir `imagePaths` remplace l'intégralité des images existantes.
   Future<void> modifierProduit({
     required String id,
     String? nom,
     String? description,
     num? prix,
-    int? quantite,
+    int? stockAlloue,
     String? categorieId,
-    String? delaiPreparation,
-    String? imagePath,
+    List<String> imagePaths = const [],
   }) async {
     final form = FormData.fromMap({
       if (nom != null) 'nom': nom,
       if (description != null) 'description': description,
       if (prix != null) 'prix': prix,
-      if (quantite != null) 'quantite': quantite,
+      if (stockAlloue != null) 'stockAlloue': stockAlloue,
       if (categorieId != null) 'categorieId': categorieId,
-      if (delaiPreparation != null) 'delai_preparation': delaiPreparation,
-      if (imagePath != null) 'image': await MultipartFile.fromFile(imagePath),
+      if (imagePaths.isNotEmpty)
+        'images': [
+          for (final path in imagePaths) await MultipartFile.fromFile(path),
+        ],
     });
     await dio.put(VendeurProduitEndpoints.modifierProduit(id), data: form);
   }
@@ -95,64 +111,42 @@ class VendeurProduitDataSource {
     await dio.delete(VendeurProduitEndpoints.supprimerProduit(id));
   }
 
-  Future<void> toggleDisponibilite(String id) async {
-    await dio.patch(VendeurProduitEndpoints.disponibilite(id));
-  }
-
-  /// Duplique un produit existant (POST /vendeur/produit/:id/dupliquer).
-  Future<void> dupliquerProduit(String id) async {
-    await dio.post(VendeurProduitEndpoints.dupliquer(id));
-  }
-
-  /// Upload de plusieurs images pour un produit (multipart, champ `images`).
-  /// Contrat backend en cours de déploiement en parallèle.
-  Future<void> ajouterImages(String produitId, List<String> imagePaths) async {
-    final form = FormData.fromMap({
-      'images': [
-        for (final path in imagePaths) await MultipartFile.fromFile(path),
-      ],
+  Future<void> majStock(String id, {int? stock, int? stockAlloue}) async {
+    await dio.patch(VendeurProduitEndpoints.stock(id), data: {
+      if (stock != null) 'stock': stock,
+      if (stockAlloue != null) 'stockAlloue': stockAlloue,
     });
-    await dio.post(VendeurProduitEndpoints.images(produitId), data: form);
   }
 
-  Future<void> supprimerImage(String produitId, String imageId) async {
-    await dio.delete(VendeurProduitEndpoints.image(produitId, imageId));
+  // ── Tableau de bord ───────────────────────────────────────────────────
+
+  /// Compteurs du catalogue : total, validés, en attente, rejetés, ruptures.
+  Future<Map<String, dynamic>> statsProduits() async {
+    final res = await dio.get(VendeurDashboardEndpoints.statsProduits);
+    return _extractMap(res.data, 'stats');
   }
 
-  // ── Dashboard / statistiques ──────────────────────────────────────────
-
-  Future<Map<String, dynamic>> dashboard() async {
-    final res = await dio.get(VendeurDashboardEndpoints.dashboard);
-    return _extractMap(res.data);
-  }
-
-  Future<Map<String, dynamic>> statistiques() async {
-    final res = await dio.get(VendeurDashboardEndpoints.statistiques);
-    return _extractMap(res.data);
-  }
-
-  Future<Map<String, dynamic>> statistiquesVues() async {
-    final res = await dio.get(VendeurDashboardEndpoints.statistiquesVues);
-    return _extractMap(res.data);
-  }
-
-  Future<Map<String, dynamic>> nombreProduit() async {
-    final res = await dio.get(VendeurDashboardEndpoints.nombreProduit);
-    return _extractMap(res.data);
-  }
-
-  Future<Map<String, dynamic>> nombreProduitCategorie() async {
-    final res = await dio.get(VendeurDashboardEndpoints.nombreProduitCategorie);
-    return _extractMap(res.data);
-  }
-
-  Future<List<ProduitModel>> rechercheProduits(String recherche) async {
+  /// Agrégats de ventes : CA, unités, top produits, série journalière.
+  Future<VendeurVentesModel> ventes({int jours = 30}) async {
     final res = await dio.get(
-      VendeurDashboardEndpoints.rechercheProduits,
-      queryParameters: {'recherche': recherche},
+      VendeurCommandeEndpoints.ventes,
+      queryParameters: {'jours': jours},
+    );
+    return VendeurVentesModel.fromJson(_extractMap(res.data, 'ventes'));
+  }
+
+  Future<List<VendeurCommandeModel>> mesCommandes({String? statut}) async {
+    final res = await dio.get(
+      VendeurCommandeEndpoints.commandes,
+      queryParameters: {if (statut != null) 'statut': statut},
     );
     return _extractList(res.data)
-        .map((e) => ProduitModel.fromJson(e as Map<String, dynamic>))
+        .map((e) => VendeurCommandeModel.fromJson(e as Map<String, dynamic>))
         .toList();
+  }
+
+  Future<VendeurCommandeModel> commande(String id) async {
+    final res = await dio.get(VendeurCommandeEndpoints.commande(id));
+    return VendeurCommandeModel.fromJson(_extractMap(res.data, 'commande'));
   }
 }

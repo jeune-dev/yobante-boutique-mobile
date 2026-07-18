@@ -6,6 +6,8 @@ import '../../domain/entities/produit_vendeur.dart';
 import '../../domain/repositories/vendeur_produit_repository.dart';
 import '../datasources/vendeur_produit_datasource.dart';
 import '../models/categorie_model.dart';
+import '../models/vendeur_commande_model.dart';
+import '../models/vendeur_ventes_model.dart';
 
 class VendeurProduitRepositoryImpl implements VendeurProduitRepository {
   final VendeurProduitDataSource dataSource;
@@ -25,49 +27,40 @@ class VendeurProduitRepositoryImpl implements VendeurProduitRepository {
   Failure _failure(Object e) =>
       ServerFailure(errorMessage: _errorMessage(e), statusCode: _statusCode(e));
 
-  @override
-  Future<Either<Failure, List<ProduitVendeur>>> mesProduits() async {
+  /// Enveloppe commune : évite de répéter le même try/catch sur chaque méthode.
+  Future<Either<Failure, T>> _garde<T>(Future<T> Function() action) async {
     try {
-      return Right(await dataSource.mesProduits());
+      return Right(await action());
     } catch (e) {
       return Left(_failure(e));
     }
   }
 
   @override
-  Future<Either<Failure, List<CategorieModel>>> categories() async {
-    try {
-      return Right(await dataSource.categories());
-    } catch (e) {
-      return Left(_failure(e));
-    }
-  }
+  Future<Either<Failure, List<ProduitVendeur>>> mesProduits({String? statut}) =>
+      _garde(() => dataSource.mesProduits(statut: statut));
+
+  @override
+  Future<Either<Failure, List<CategorieModel>>> categories() =>
+      _garde(() => dataSource.categories());
 
   @override
   Future<Either<Failure, void>> ajouterProduit({
     required String nom,
     required String description,
     required num prix,
-    required int quantite,
+    required int stockAlloue,
     required String categorieId,
-    String? delaiPreparation,
-    String? imagePath,
-  }) async {
-    try {
-      await dataSource.ajouterProduit(
-        nom: nom,
-        description: description,
-        prix: prix,
-        quantite: quantite,
-        categorieId: categorieId,
-        delaiPreparation: delaiPreparation,
-        imagePath: imagePath,
-      );
-      return const Right(null);
-    } catch (e) {
-      return Left(_failure(e));
-    }
-  }
+    List<String> imagePaths = const [],
+  }) =>
+      _garde(() => dataSource.ajouterProduit(
+            nom: nom,
+            description: description,
+            prix: prix,
+            stockAlloue: stockAlloue,
+            categorieId: categorieId,
+            imagePaths: imagePaths,
+          ));
 
   @override
   Future<Either<Failure, void>> modifierProduit({
@@ -75,132 +68,41 @@ class VendeurProduitRepositoryImpl implements VendeurProduitRepository {
     String? nom,
     String? description,
     num? prix,
-    int? quantite,
+    int? stockAlloue,
     String? categorieId,
-    String? delaiPreparation,
-    String? imagePath,
-  }) async {
-    try {
-      await dataSource.modifierProduit(
-        id: id,
-        nom: nom,
-        description: description,
-        prix: prix,
-        quantite: quantite,
-        categorieId: categorieId,
-        delaiPreparation: delaiPreparation,
-        imagePath: imagePath,
-      );
-      return const Right(null);
-    } catch (e) {
-      return Left(_failure(e));
-    }
-  }
+    List<String> imagePaths = const [],
+  }) =>
+      _garde(() => dataSource.modifierProduit(
+            id: id,
+            nom: nom,
+            description: description,
+            prix: prix,
+            stockAlloue: stockAlloue,
+            categorieId: categorieId,
+            imagePaths: imagePaths,
+          ));
 
   @override
-  Future<Either<Failure, void>> supprimerProduit(String id) async {
-    try {
-      await dataSource.supprimerProduit(id);
-      return const Right(null);
-    } catch (e) {
-      return Left(_failure(e));
-    }
-  }
+  Future<Either<Failure, void>> supprimerProduit(String id) =>
+      _garde(() => dataSource.supprimerProduit(id));
 
   @override
-  Future<Either<Failure, void>> toggleDisponibilite(String id) async {
-    try {
-      await dataSource.toggleDisponibilite(id);
-      return const Right(null);
-    } catch (e) {
-      return Left(_failure(e));
-    }
-  }
+  Future<Either<Failure, void>> majStock(String id, {int? stock, int? stockAlloue}) =>
+      _garde(() => dataSource.majStock(id, stock: stock, stockAlloue: stockAlloue));
 
   @override
-  Future<Either<Failure, void>> dupliquerProduit(String id) async {
-    try {
-      await dataSource.dupliquerProduit(id);
-      return const Right(null);
-    } catch (e) {
-      return Left(_failure(e));
-    }
-  }
+  Future<Either<Failure, Map<String, dynamic>>> statsProduits() =>
+      _garde(() => dataSource.statsProduits());
 
   @override
-  Future<Either<Failure, void>> ajouterImages(
-      String produitId, List<String> imagePaths) async {
-    try {
-      await dataSource.ajouterImages(produitId, imagePaths);
-      return const Right(null);
-    } catch (e) {
-      return Left(_failure(e));
-    }
-  }
+  Future<Either<Failure, VendeurVentesModel>> ventes({int jours = 30}) =>
+      _garde(() => dataSource.ventes(jours: jours));
 
   @override
-  Future<Either<Failure, void>> supprimerImage(
-      String produitId, String imageId) async {
-    try {
-      await dataSource.supprimerImage(produitId, imageId);
-      return const Right(null);
-    } catch (e) {
-      return Left(_failure(e));
-    }
-  }
+  Future<Either<Failure, List<VendeurCommandeModel>>> mesCommandes({String? statut}) =>
+      _garde(() => dataSource.mesCommandes(statut: statut));
 
   @override
-  Future<Either<Failure, Map<String, dynamic>>> dashboard() async {
-    try {
-      return Right(await dataSource.dashboard());
-    } catch (e) {
-      return Left(_failure(e));
-    }
-  }
-
-  @override
-  Future<Either<Failure, Map<String, dynamic>>> statistiques() async {
-    try {
-      return Right(await dataSource.statistiques());
-    } catch (e) {
-      return Left(_failure(e));
-    }
-  }
-
-  @override
-  Future<Either<Failure, Map<String, dynamic>>> statistiquesVues() async {
-    try {
-      return Right(await dataSource.statistiquesVues());
-    } catch (e) {
-      return Left(_failure(e));
-    }
-  }
-
-  @override
-  Future<Either<Failure, Map<String, dynamic>>> nombreProduit() async {
-    try {
-      return Right(await dataSource.nombreProduit());
-    } catch (e) {
-      return Left(_failure(e));
-    }
-  }
-
-  @override
-  Future<Either<Failure, Map<String, dynamic>>> nombreProduitCategorie() async {
-    try {
-      return Right(await dataSource.nombreProduitCategorie());
-    } catch (e) {
-      return Left(_failure(e));
-    }
-  }
-
-  @override
-  Future<Either<Failure, List<ProduitVendeur>>> rechercheProduits(
-      String recherche) async {
-    try {
-      return Right(await dataSource.rechercheProduits(recherche));
-    } catch (e) {
-      return Left(_failure(e));
-    }
-  }
+  Future<Either<Failure, VendeurCommandeModel>> commande(String id) =>
+      _garde(() => dataSource.commande(id));
 }
