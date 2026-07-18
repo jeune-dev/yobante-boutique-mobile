@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:yobante/features/auth/domain/entities/user.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'home_page.dart';
-import 'produit_page.dart';
 import 'profil_page.dart';
-import '../../../../boutique/presentation/pages/ma_boutique_page.dart';
-import '../../../../commande/presentation/pages/vendeur_commandes_page.dart';
+import '../../../../vendeur/presentation/pages/vendeur_accueil_page.dart';
+import '../../../../vendeur/presentation/pages/vendeur_commandes_page.dart';
 import '../../../../vendeur/presentation/pages/mes_produits_page.dart';
+import '../../../../vendeur/presentation/pages/demande_publication_page.dart';
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
 class _C {
@@ -59,19 +58,19 @@ class _MainVendeurPageState extends State<MainVendeurPage>
       label: 'Accueil',
     ),
     _NavItem(
+      icon: Icons.receipt_long_outlined,
+      activeIcon: Icons.receipt_long_rounded,
+      label: 'Commandes',
+    ),
+    _NavItem(
       icon: Icons.shopping_bag_outlined,
       activeIcon: Icons.shopping_bag_rounded,
       label: 'Produits',
     ),
     _NavItem(
-      icon: Icons.storefront_outlined,
-      activeIcon: Icons.storefront_rounded,
-      label: 'Ma boutique',
-    ),
-    _NavItem(
-      icon: Icons.receipt_long_outlined,
-      activeIcon: Icons.receipt_long_rounded,
-      label: 'Commandes',
+      icon: Icons.add_box_outlined,
+      activeIcon: Icons.add_box_rounded,
+      label: 'Demande',
     ),
     _NavItem(
       icon: Icons.person_outline_rounded,
@@ -87,10 +86,10 @@ class _MainVendeurPageState extends State<MainVendeurPage>
     super.initState();
 
     _pages = [
-      HomePage(user: widget.user),
-      const MesProduitsPage(),
-      const MaBoutiquePage(),
+      VendeurAccueilPage(prenom: widget.user?.prenom),
       const VendeurCommandesPage(),
+      const MesProduitsPage(),
+      const DemandePublicationPage(),
       ProfilPage(user: widget.user),
     ];
 

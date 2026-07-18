@@ -17,7 +17,7 @@ import '../../../../notifications/presentation/pages/notifications_page.dart';
 import '../../../../messagerie/presentation/pages/conversations_page.dart';
 import '../../../../signalements/presentation/pages/mes_signalements_page.dart';
 import '../../../../promotions/presentation/pages/promotions_actives_page.dart';
-import 'package:yobante/features/espace_vendeur/presentation/pages/espace_vendeur_page.dart';
+import 'package:yobante/features/home/presentation/pages/vendeur/main_vendeur_page.dart';
 import '../../../../favoris/data/datasources/favoris_remote_datasource.dart';
 import '../../../../commande/data/datasources/commande_remote_datasource.dart';
 import '../../../../commande/data/services/panier_service.dart';
@@ -561,7 +561,7 @@ class _ProfilPageState extends State<ProfilPage>
     const goldDark = Color(0xFF8A6D00);
     return GestureDetector(
       onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => EspaceVendeurPage(user: _user)),
+        MaterialPageRoute(builder: (_) => MainVendeurPage(user: _user)),
       ),
       child: Container(
         width: double.infinity,
