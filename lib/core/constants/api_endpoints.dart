@@ -178,6 +178,31 @@ class PromotionsEndpoints {
   static String parId(String id) => '/promotions/$id';
 }
 
+/// Rayons (catalogue acheteur).
+class RayonEndpoints {
+  RayonEndpoints._();
+
+  static String get rayons => '/rayons';
+  static String sousRayons(String rayonId) => '/rayons/$rayonId/sous-rayons';
+  static String produitsDuRayon(String rayonId) => '/rayons/$rayonId/produits';
+  static String produitsduSousRayon(String sousRayonId) =>
+      '/rayons/sous-rayons/$sousRayonId/produits';
+}
+
+/// Promotions groupées (nos promos du moment / à ne pas rater / à venir).
+class PromotionEndpoints {
+  PromotionEndpoints._();
+
+  static String get groupees => '/promotions/groupees';
+}
+
+/// Bannières de la page d'accueil.
+class BanniereEndpoints {
+  BanniereEndpoints._();
+
+  static String get bannieres => '/bannieres';
+}
+
 /// Signalements.
 class SignalementsEndpoints {
   SignalementsEndpoints._();

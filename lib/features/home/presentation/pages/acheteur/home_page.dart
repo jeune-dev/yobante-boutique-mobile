@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -11,6 +12,8 @@ import '../../../data/repositories/produit_repository_impl.dart';
 import '../../../data/datasources/produit_remote_datasource.dart';
 import '../../../data/models/produit_model.dart';
 import '../../../data/models/boutique_model.dart';
+import '../../../data/models/rayon_model.dart';
+import '../../../../../features/promotions/data/models/promo_groupee_model.dart';
 import '../../../../../core/services/token_service.dart';
 import '../../../../../injection_container.dart';
 import '../../../../../core/services/whatsapp_service.dart';
@@ -28,6 +31,7 @@ import 'boutiques_page.dart';
 import 'produit_detail_page.dart';
 import 'produit_page.dart';
 import 'categorie_produits_page.dart';
+import 'rayon_produits_page.dart';
 import 'profil_page.dart';
 import '../../../../notifications/presentation/pages/notifications_page.dart';
 import '../../../../auth/presentation/pages/login_page.dart';
@@ -94,6 +98,11 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   // Découverte (endpoints backend jusque-là inexploités)
   List<ProduitModel>  _tendances = [];
   List<BoutiqueModel> _nouvelles = [];
+
+  // API : rayons, bannières, promotions groupées
+  List<RayonModel>  _rayonsApi        = [];
+  List<dynamic>     _banniersList     = [];
+  PromoGroupeeModel? _promoGroupee;
 
   late AnimationController _headerCtrl;
   late Animation<double>   _headerFade;
@@ -166,10 +175,37 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
         setState(() { _dataSource = dataSource; _produitBloc = bloc; });
         _fetchBoutiques();
         _fetchDecouverte();
+        _fetchRayons();
+        _fetchBannieres();
+        _fetchPromosGroupees();
       }
     } catch (e) {
       debugPrint('Erreur init bloc: $e');
     }
+  }
+
+  Future<void> _fetchRayons() async {
+    if (_dataSource == null) return;
+    try {
+      final list = await _dataSource!.getRayons();
+      if (mounted) setState(() => _rayonsApi = list);
+    } catch (_) {/* fallback sur les rayons statiques */}
+  }
+
+  Future<void> _fetchBannieres() async {
+    if (_dataSource == null) return;
+    try {
+      final list = await _dataSource!.getBannieres();
+      if (mounted) setState(() => _banniersList = list);
+    } catch (_) {/* fallback sur l'asset local */}
+  }
+
+  Future<void> _fetchPromosGroupees() async {
+    if (_dataSource == null) return;
+    try {
+      final promo = await _dataSource!.getPromotionsGroupees();
+      if (mounted) setState(() => _promoGroupee = promo);
+    } catch (_) {/* fallback sur les blocs promo existants */}
   }
 
   Future<void> _fetchBoutiques() async {
@@ -276,7 +312,14 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             child: RefreshIndicator(
               onRefresh: () async {
                 _produitBloc?.add(LoadProduits());
-                await Future.wait([_loadStats(), _fetchBoutiques(), _fetchDecouverte()]);
+                await Future.wait([
+                  _loadStats(),
+                  _fetchBoutiques(),
+                  _fetchDecouverte(),
+                  _fetchRayons(),
+                  _fetchBannieres(),
+                  _fetchPromosGroupees(),
+                ]);
               },
               color: _C.green,
               backgroundColor: _C.white,
@@ -421,6 +464,15 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
   // ── Bannière publicitaire (image adaptée au format mobile) ──────────────────
   Widget _buildImageBanner() {
+    // Première bannière depuis l'API si disponible, sinon fallback sur l'asset.
+    String? apiImageUrl;
+    if (_banniersList.isNotEmpty) {
+      final first = _banniersList.first;
+      if (first is Map) {
+        apiImageUrl = first['image']?.toString();
+      }
+    }
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 2),
       child: GestureDetector(
@@ -429,11 +481,29 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(20),
-          child: Image.asset(
-            'assets/images/banniere du haut.png',
-            width: double.infinity,
-            fit: BoxFit.fitWidth,
-          ),
+          child: apiImageUrl != null && apiImageUrl.isNotEmpty
+              ? CachedNetworkImage(
+                  imageUrl: apiImageUrl,
+                  width: double.infinity,
+                  fit: BoxFit.fitWidth,
+                  placeholder: (_, __) => Container(
+                    height: 160,
+                    color: _C.greenLight,
+                    child: const Center(
+                        child: CircularProgressIndicator(
+                            color: _C.green, strokeWidth: 2)),
+                  ),
+                  errorWidget: (_, __, ___) => Image.asset(
+                    'assets/images/banniere du haut.png',
+                    width: double.infinity,
+                    fit: BoxFit.fitWidth,
+                  ),
+                )
+              : Image.asset(
+                  'assets/images/banniere du haut.png',
+                  width: double.infinity,
+                  fit: BoxFit.fitWidth,
+                ),
         ),
       ),
     );
@@ -462,6 +532,14 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
   // ── Bloc "Nos promos du moment" (bannières images + Voir tous) ──────────────
   Widget _buildNosPromosDuMoment() {
+    // Priorité : promotions groupées API → blocs dashboard → assets locaux
+    final apiPromos = _promoGroupee?.nosPromosDuMoment ?? [];
+    final apiImages = apiPromos
+        .whereType<Map>()
+        .map((p) => (p['image'] ?? p['produit']?['image'] ?? '').toString())
+        .where((url) => url.isNotEmpty)
+        .toList();
+
     return Padding(
       padding: const EdgeInsets.only(top: 22),
       child: Column(
@@ -475,16 +553,59 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                     color: _C.black, letterSpacing: -0.4)),
           ),
           const SizedBox(height: 14),
-          // Bannière pilotée depuis le dashboard (si définie), sinon carrousel d'assets.
           if (_blocImages['nos_promos_du_moment'] != null)
             _buildBlocBanner(_blocImages['nos_promos_du_moment']!)
+          else if (apiImages.isNotEmpty)
+            SizedBox(
+              height: 170,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 18),
+                itemCount: apiImages.length + 1,
+                separatorBuilder: (_, __) => const SizedBox(width: 14),
+                itemBuilder: (context, i) {
+                  if (i == apiImages.length) return _buildVoirTousCard();
+                  return GestureDetector(
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const PromotionsActivesPage()),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(18),
+                      child: CachedNetworkImage(
+                        imageUrl: apiImages[i],
+                        width: 302,
+                        height: 170,
+                        fit: BoxFit.cover,
+                        placeholder: (_, __) => Container(
+                          width: 302,
+                          height: 170,
+                          decoration: BoxDecoration(
+                            color: _C.greenLight,
+                            borderRadius: BorderRadius.circular(18),
+                          ),
+                        ),
+                        errorWidget: (_, __, ___) => Container(
+                          width: 302,
+                          height: 170,
+                          decoration: BoxDecoration(
+                            color: _C.greenLight,
+                            borderRadius: BorderRadius.circular(18),
+                          ),
+                          child: const Icon(Icons.image_outlined, color: _C.label),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            )
           else
             SizedBox(
               height: 170,
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 18),
-                itemCount: _promoImages.length + 1, // +1 : carte "Voir tous"
+                itemCount: _promoImages.length + 1,
                 separatorBuilder: (_, __) => const SizedBox(width: 14),
                 itemBuilder: (context, i) {
                   if (i == _promoImages.length) return _buildVoirTousCard();
@@ -534,6 +655,14 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
   // ── Bloc "À ne pas manquer" (sélection éditoriale, même design) ─────────────
   Widget _buildANePasManquer() {
+    // Promotions "à ne pas rater" depuis l'API si disponibles
+    final apiPromos = _promoGroupee?.aNesPasRater ?? [];
+    final apiImages = apiPromos
+        .whereType<Map>()
+        .map((p) => (p['image'] ?? p['produit']?['image'] ?? '').toString())
+        .where((url) => url.isNotEmpty)
+        .toList();
+
     final int count = _adsDefault.length;
     return Padding(
       padding: const EdgeInsets.only(top: 22),
@@ -550,26 +679,68 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           const SizedBox(height: 14),
           if (_blocImages['a_ne_pas_rater'] != null)
             _buildBlocBanner(_blocImages['a_ne_pas_rater']!)
+          else if (apiImages.isNotEmpty)
+            SizedBox(
+              height: 178,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 18),
+                itemCount: apiImages.length + 1,
+                separatorBuilder: (_, __) => const SizedBox(width: 14),
+                itemBuilder: (context, i) {
+                  if (i == apiImages.length) return _buildVoirTousCard();
+                  return GestureDetector(
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const PromotionsActivesPage()),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(20),
+                      child: CachedNetworkImage(
+                        imageUrl: apiImages[i],
+                        width: 268,
+                        height: 178,
+                        fit: BoxFit.cover,
+                        placeholder: (_, __) => Container(
+                          width: 268,
+                          height: 178,
+                          color: _C.greenLight,
+                        ),
+                        errorWidget: (_, __, ___) {
+                          // Fallback sur la carte dégradé statique
+                          final g = _adGradients[i % _adGradients.length];
+                          final darkText = i % _adGradients.length == 1;
+                          final ad = _adsDefault[i % _adsDefault.length];
+                          return _buildAdCard(
+                            gradient: g, darkText: darkText,
+                            tag: ad.tag, big: ad.big, sub: ad.sub,
+                          );
+                        },
+                      ),
+                    ),
+                  );
+                },
+              ),
+            )
           else
-          SizedBox(
-            height: 178,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 18),
-              itemCount: count + 1, // +1 : carte "Voir tous"
-              separatorBuilder: (_, __) => const SizedBox(width: 14),
-              itemBuilder: (context, i) {
-                if (i == count) return _buildVoirTousCard();
-                final g = _adGradients[i % _adGradients.length];
-                final darkText = i % _adGradients.length == 1;
-                final ad = _adsDefault[i];
-                return _buildAdCard(
-                  gradient: g, darkText: darkText,
-                  tag: ad.tag, big: ad.big, sub: ad.sub,
-                );
-              },
+            SizedBox(
+              height: 178,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 18),
+                itemCount: count + 1,
+                separatorBuilder: (_, __) => const SizedBox(width: 14),
+                itemBuilder: (context, i) {
+                  if (i == count) return _buildVoirTousCard();
+                  final g = _adGradients[i % _adGradients.length];
+                  final darkText = i % _adGradients.length == 1;
+                  final ad = _adsDefault[i];
+                  return _buildAdCard(
+                    gradient: g, darkText: darkText,
+                    tag: ad.tag, big: ad.big, sub: ad.sub,
+                  );
+                },
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -697,6 +868,9 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   ];
 
   Widget _buildNosRayons() {
+    // Utiliser les rayons API si disponibles, sinon les rayons statiques.
+    final hasApiRayons = _rayonsApi.isNotEmpty;
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(18, 26, 18, 0),
       child: Column(
@@ -720,20 +894,83 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             ],
           ),
           const SizedBox(height: 14),
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            padding: EdgeInsets.zero,
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 4,
-              crossAxisSpacing: 10,
-              mainAxisSpacing: 10,
-              childAspectRatio: 0.82,
+          if (hasApiRayons)
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              padding: EdgeInsets.zero,
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 4,
+                crossAxisSpacing: 10,
+                mainAxisSpacing: 10,
+                childAspectRatio: 0.82,
+              ),
+              itemCount: _rayonsApi.length,
+              itemBuilder: (_, i) => _buildRayonApiCard(_rayonsApi[i]),
+            )
+          else
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              padding: EdgeInsets.zero,
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 4,
+                crossAxisSpacing: 10,
+                mainAxisSpacing: 10,
+                childAspectRatio: 0.82,
+              ),
+              itemCount: _rayons.length,
+              itemBuilder: (_, i) => _buildRayonCard(_rayons[i]),
             ),
-            itemCount: _rayons.length,
-            itemBuilder: (_, i) => _buildRayonCard(_rayons[i]),
-          ),
         ],
+      ),
+    );
+  }
+
+  // Carte rayon provenant de l'API (RayonModel).
+  Widget _buildRayonApiCard(RayonModel rayon) {
+    final hasImage = rayon.image != null && rayon.image!.isNotEmpty;
+    return GestureDetector(
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => RayonProduitsPage(rayon: rayon),
+        ),
+      ),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+        decoration: BoxDecoration(
+          color: _C.green,
+          borderRadius: BorderRadius.circular(15),
+          boxShadow: [
+            BoxShadow(
+                color: _C.green.withOpacity(0.18),
+                blurRadius: 10, offset: const Offset(0, 5)),
+          ],
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (hasImage)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: CachedNetworkImage(
+                  imageUrl: rayon.image!,
+                  width: 28, height: 28, fit: BoxFit.cover,
+                  errorWidget: (_, __, ___) =>
+                      const Icon(Icons.category_rounded, color: _C.white, size: 21),
+                ),
+              )
+            else
+              const Icon(Icons.category_rounded, color: _C.white, size: 21),
+            const SizedBox(height: 6),
+            Text(rayon.nom,
+                textAlign: TextAlign.center,
+                maxLines: 2, overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.dmSans(
+                    fontSize: 9.5, fontWeight: FontWeight.w700,
+                    color: _C.white, height: 1.1)),
+          ],
+        ),
       ),
     );
   }
@@ -780,16 +1017,42 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     'assets/images/black friday.png',
   ];
 
-  // Nombre de bannières effectives du bloc "à venir" (1 si image dashboard, sinon assets).
-  int get _promoAVenirCount =>
-      _blocImages['nos_promos_a_venir'] != null ? 1 : _promoAVenirImages.length;
+  // Nombre de bannières effectives du bloc "à venir".
+  int get _promoAVenirCount {
+    if (_blocImages['nos_promos_a_venir'] != null) return 1;
+    final apiCount = (_promoGroupee?.nosPromosAVenir ?? [])
+        .whereType<Map>()
+        .map((p) => (p['image'] ?? p['produit']?['image'] ?? '').toString())
+        .where((url) => url.isNotEmpty)
+        .length;
+    return apiCount > 0 ? apiCount : _promoAVenirImages.length;
+  }
 
   Widget _buildNosPromosAVenir() {
     final double bannerW = MediaQuery.of(context).size.width - 32;
     final double bannerH = bannerW / 1.776; // format 16:9 des bannières
     final String? apiImg = _blocImages['nos_promos_a_venir'];
-    final List<String> imgs = apiImg != null ? [apiImg] : _promoAVenirImages;
-    final bool isNetwork = apiImg != null;
+
+    // Images depuis les promotions groupées "à venir" si disponibles
+    final apiPromoAVenir = _promoGroupee?.nosPromosAVenir ?? [];
+    final apiPromoImages = apiPromoAVenir
+        .whereType<Map>()
+        .map((p) => (p['image'] ?? p['produit']?['image'] ?? '').toString())
+        .where((url) => url.isNotEmpty)
+        .toList();
+
+    final List<String> imgs;
+    final bool isNetwork;
+    if (apiImg != null) {
+      imgs = [apiImg];
+      isNetwork = true;
+    } else if (apiPromoImages.isNotEmpty) {
+      imgs = apiPromoImages;
+      isNetwork = true;
+    } else {
+      imgs = _promoAVenirImages;
+      isNetwork = false;
+    }
     return Padding(
       padding: const EdgeInsets.only(top: 26),
       child: Column(
@@ -840,12 +1103,15 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(18),
                     child: isNetwork
-                        ? Image.network(
-                            imgs[i],
+                        ? CachedNetworkImage(
+                            imageUrl: imgs[i],
                             width: bannerW,
                             height: bannerH,
                             fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                            errorWidget: (_, __, ___) => Container(
+                              color: _C.greenLight,
+                              child: const Icon(Icons.image_outlined, color: _C.label),
+                            ),
                           )
                         : Image.asset(
                             imgs[i],
