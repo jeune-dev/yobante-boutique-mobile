@@ -208,8 +208,9 @@ class _ProfilPageState extends State<ProfilPage>
   Widget _buildConnecteContent() {
     return Column(
       children: [
-        // Espace vendeur — visible uniquement pour un compte « Vendeur »
-        if (_user?.role == 'Vendeur') ...[
+        // Espace vendeur — visible uniquement pour un compte « Vendeur ».
+        // Comparaison insensible à la casse : le backend renvoie « VENDEUR ».
+        if (_user?.role.toUpperCase() == 'VENDEUR') ...[
           _buildEspaceVendeurCard(),
           const SizedBox(height: 10),
         ],

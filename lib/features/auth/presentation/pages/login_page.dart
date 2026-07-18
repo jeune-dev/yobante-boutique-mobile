@@ -123,11 +123,11 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           if (state is AuthSuccess) {
             final user = state.user;
 
-            // Yobante Boutique est une application 100% client : toute connexion
-            // réussie ouvre l'interface client (les admins gèrent la boutique
-            // depuis le dashboard web, pas depuis l'application mobile).
+            // Le rôle détermine l'interface : un vendeur arrive sur son espace,
+            // les autres sur la boutique. Les admins gèrent la boutique depuis
+            // le dashboard web et voient donc l'interface client sur mobile.
             Navigator.of(context).pushNamedAndRemoveUntil(
-              AppRouter.acheteurRoute,
+              AppRouter.routeSelonRole(user.role),
               (_) => false,
               arguments: user,
             );

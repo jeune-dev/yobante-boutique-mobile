@@ -104,14 +104,16 @@ class _SplashPageState extends State<SplashPage> with TickerProviderStateMixin {
 
     if (!mounted) return;
 
-    // Yobante Boutique = application 100% client.
-    // Si un token client valide (non expiré) existe → on va directement à la boutique.
-    // Sinon → écran d'accueil (onboarding) : le client peut consulter la boutique
-    // sans compte et ne se connectera que pour valider sa commande.
+    // Session valide → on ouvre l'interface correspondant au rôle porté par le
+    // token. Sinon → onboarding : le visiteur peut consulter la boutique sans
+    // compte et ne se connectera que pour valider sa commande.
     if (token != null && token.isNotEmpty) {
       try {
         if (!Jwt.isExpired(token)) {
-          Navigator.of(context).pushReplacementNamed(AppRouter.acheteurRoute);
+          final payload = Jwt.parseJwt(token);
+          Navigator.of(context).pushReplacementNamed(
+            AppRouter.routeSelonRole(payload['role']?.toString()),
+          );
           return;
         }
       } catch (e) {

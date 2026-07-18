@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:yobante/features/auth/domain/entities/user.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../../../../injection_container.dart';
+import '../../../../../core/routes/app_router.dart';
+import '../../../../../core/services/token_service.dart';
 import 'home_page.dart';
 import 'recherche_page.dart';
 import '../../../../promotions/presentation/pages/promotions_actives_page.dart';
@@ -51,17 +54,28 @@ class _MainAcheteurPageState extends State<MainAcheteurPage>
   late List<Animation<double>>   _itemScale;
   late List<Animation<double>>   _labelFade;
 
-  final List<_NavItem> _navItems = const [
+  // Navigation du visiteur : pas d'onglet Commande — sans compte il n'y a pas
+  // d'historique à afficher. Le dernier item mène à la connexion au lieu de
+  // changer d'onglet.
+  static const List<_NavItem> _navVisiteur = [
+    _NavItem(icon: Icons.home_outlined, activeIcon: Icons.home_rounded, label: 'Accueil'),
+    _NavItem(icon: Icons.search_rounded, activeIcon: Icons.search_rounded, label: 'Rechercher'),
     _NavItem(
-      icon: Icons.home_outlined,
-      activeIcon: Icons.home_rounded,
-      label: 'Accueil',
+      icon: Icons.local_offer_outlined,
+      activeIcon: Icons.local_offer_rounded,
+      label: 'Promotion',
     ),
     _NavItem(
-      icon: Icons.search_rounded,
-      activeIcon: Icons.search_rounded,
-      label: 'Rechercher',
+      icon: Icons.shopping_cart_outlined,
+      activeIcon: Icons.shopping_cart_rounded,
+      label: 'Panier',
     ),
+    _NavItem(icon: Icons.login_rounded, activeIcon: Icons.login_rounded, label: 'Connexion'),
+  ];
+
+  static const List<_NavItem> _navConnecte = [
+    _NavItem(icon: Icons.home_outlined, activeIcon: Icons.home_rounded, label: 'Accueil'),
+    _NavItem(icon: Icons.search_rounded, activeIcon: Icons.search_rounded, label: 'Rechercher'),
     _NavItem(
       icon: Icons.receipt_long_outlined,
       activeIcon: Icons.receipt_long_rounded,
@@ -79,19 +93,60 @@ class _MainAcheteurPageState extends State<MainAcheteurPage>
     ),
   ];
 
+  /// Déterminé depuis le token et non depuis `widget.user` : à la restauration
+  /// de session, le splash ouvre cette page sans passer d'utilisateur.
+  bool _estConnecte = false;
+
+  List<_NavItem> get _navItems => _estConnecte ? _navConnecte : _navVisiteur;
+
+  /// Index de l'item « Connexion » chez le visiteur : il déclenche une
+  /// navigation au lieu d'afficher une page.
+  int get _indexConnexion => _navVisiteur.length - 1;
+
   late List<Widget> _pages;
+
+  void _construirePages() {
+    _pages = _estConnecte
+        ? [
+            HomePage(user: widget.user),
+            const RechercheGlobalePage(),
+            const CommandePage(),
+            const PromotionsActivesPage(),
+            const PanierPage(),
+          ]
+        : [
+            HomePage(user: widget.user),
+            const RechercheGlobalePage(),
+            const PromotionsActivesPage(),
+            const PanierPage(),
+            // Jamais affichée : l'item « Connexion » navigue.
+            const SizedBox.shrink(),
+          ];
+  }
+
+  Future<void> _verifierSession() async {
+    final connecte = await sl<TokenService>().isAuthenticated;
+    if (!mounted || connecte == _estConnecte) return;
+    // La barre change de composition : on repart de l'accueil et on remet les
+    // animations à plat, sinon l'item précédemment actif resterait mis en avant.
+    _itemCtrl[_selectedIndex].reverse();
+    _itemCtrl[0].forward();
+    setState(() {
+      _estConnecte = connecte;
+      _selectedIndex = 0;
+      _construirePages();
+    });
+  }
 
   @override
   void initState() {
     super.initState();
 
-    _pages = [
-      HomePage(user: widget.user),
-      const RechercheGlobalePage(),
-      const CommandePage(),
-      const PromotionsActivesPage(),
-      const PanierPage(),
-    ];
+    // L'utilisateur transmis par le login suffit à trancher immédiatement ;
+    // sinon on interroge le token, ce qui couvre la restauration de session.
+    _estConnecte = widget.user != null;
+    _construirePages();
+    _verifierSession();
 
     _itemCtrl = List.generate(
       _navItems.length,
@@ -123,7 +178,15 @@ class _MainAcheteurPageState extends State<MainAcheteurPage>
     super.dispose();
   }
 
-  void _onTap(int index) {
+  Future<void> _onTap(int index) async {
+    // Chez le visiteur, « Connexion » ouvre l'écran de login. Au retour, la
+    // session est réévaluée : si la connexion a réussi, la barre bascule sur
+    // la navigation du client connecté.
+    if (!_estConnecte && index == _indexConnexion) {
+      await Navigator.of(context).pushNamed(AppRouter.loginRoute);
+      await _verifierSession();
+      return;
+    }
     if (_selectedIndex == index) return;
     _itemCtrl[_selectedIndex].reverse();
     _itemCtrl[index].forward();
