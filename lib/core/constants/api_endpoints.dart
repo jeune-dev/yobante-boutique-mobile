@@ -168,6 +168,10 @@ class PromotionsEndpoints {
   static const actives = '/promotions/actives';
   static const promotions = '/promotions';
   static const blocs = '/promotions/blocs';
+  /// Produits d'une sous-section précise, dans l'ordre fixé par l'administration.
+  static String produitsDuBloc(String blocId) => '/promotions/blocs/$blocId/produits';
+  /// Promotions d'une section : nos_promos_du_moment, a_ne_pas_rater…
+  static String section(String section) => '/promotions/$section';
   static String parId(String id) => '/promotions/$id';
 }
 

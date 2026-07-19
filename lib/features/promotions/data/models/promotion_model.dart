@@ -15,6 +15,12 @@ class PromotionModel {
   final String? produitNom;
   final String? produitImage;
 
+  /// Remise annoncée, renvoyée par le backend mais jusque-là ignorée.
+  final int pourcentageReduction;
+
+  /// Section d'accueil de rattachement.
+  final String section;
+
   PromotionModel({
     required this.id,
     required this.titre,
@@ -25,7 +31,15 @@ class PromotionModel {
     required this.produitId,
     this.produitNom,
     this.produitImage,
+    this.pourcentageReduction = 0,
+    this.section = '',
   });
+
+  /// Libellé d'affichage : le titre de la promotion, à défaut le nom du produit.
+  String get libelle =>
+      titre.isNotEmpty ? titre : (produitNom ?? 'Produit en promotion');
+
+  String get image => produitImage ?? '';
 
   factory PromotionModel.fromJson(Map<String, dynamic> json) {
     final produit = json['produit'] as Map<String, dynamic>?;
@@ -42,7 +56,16 @@ class PromotionModel {
           : null,
       produitId: (json['produitId'] ?? produit?['id'])?.toString() ?? '',
       produitNom: produit?['nom']?.toString(),
-      produitImage: produit?['image']?.toString(),
+      // Le backend expose une galerie `images` ; `image` reste accepté.
+      produitImage: (produit?['image'] ??
+              (produit?['images'] is List && (produit!['images'] as List).isNotEmpty
+                  ? (produit['images'] as List).first
+                  : null))
+          ?.toString(),
+      // DECIMAL côté Postgres : Sequelize le renvoie en chaîne (« 30.00 »).
+      // Un `as num?` donnerait null et afficherait 0 % de remise.
+      pourcentageReduction: _toDouble(json['pourcentageReduction']).round(),
+      section: json['section']?.toString() ?? '',
     );
   }
 }

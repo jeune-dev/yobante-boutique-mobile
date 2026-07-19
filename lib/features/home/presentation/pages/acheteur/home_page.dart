@@ -35,7 +35,9 @@ import '../../../../compte/presentation/bloc/compte_bloc.dart';
 import '../../../../compte/presentation/bloc/compte_event.dart';
 import '../../../../compte/presentation/bloc/compte_state.dart';
 import '../../../../../core/widgets/cloche_notifications.dart';
+import '../../../../../core/utils/image_cloudinary.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../../../../promotions/presentation/pages/section_promotions_page.dart';
 import '../../../data/datasources/banniere_remote_datasource.dart';
 import '../../../data/models/banniere_model.dart';
 import '../../../../promotions/data/models/bloc_promo_model.dart';
@@ -504,7 +506,13 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(20),
         child: CachedNetworkImage(
-          imageUrl: banniere.image,
+          // Demandée à la taille d'affichage : l'original pèse plusieurs Mo.
+          imageUrl: imageOptimisee(
+            banniere.image,
+            largeur: pleineLargeur
+                ? MediaQuery.of(context).size.width.round()
+                : 320,
+          ),
           width: pleineLargeur ? double.infinity : 320,
           height: pleineLargeur ? null : 168,
           fit: pleineLargeur ? BoxFit.fitWidth : BoxFit.cover,
@@ -568,6 +576,32 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     );
   }
 
+  /// Ouvre la page d'une section, en reprenant le titre et le visuel de la
+  /// sous-section touchée.
+  void _ouvrirSection(String section, {int index = 0}) {
+    final blocs = _blocsParSection[section] ?? const [];
+    final bloc = index < blocs.length ? blocs[index] : null;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => SectionPromotionsPage(
+          section: section,
+          titre: bloc?.titre?.isNotEmpty == true
+              ? bloc!.titre!
+              : _titresSections[section] ?? 'Promotions',
+          image: bloc?.image,
+          // Chaque sous-section n'affiche que ses propres produits.
+          blocPromoId: bloc?.id,
+        ),
+      ),
+    );
+  }
+
+  static const Map<String, String> _titresSections = {
+    'nos_promos_du_moment': 'Nos promos du moment',
+    'a_ne_pas_rater': 'À ne pas manquer',
+    'nos_promos_a_venir': 'Nos promos à venir',
+  };
+
   /// Carrousel des sous-sections d'une section.
   ///
   /// Les images viennent du dashboard ; `secours` n'est utilisé que si
@@ -585,17 +619,17 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
         itemCount: total + 1, // +1 : carte « Voir tous »
         separatorBuilder: (_, __) => const SizedBox(width: 14),
         itemBuilder: (context, i) {
-          if (i == total) return _buildVoirTousCard();
+          if (i == total) return _buildVoirTousCard(section);
           return GestureDetector(
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const PromotionsActivesPage()),
-            ),
+            // Chaque sous-section ouvre la page de sa section, avec son propre
+            // titre et son visuel.
+            onTap: () => _ouvrirSection(section, index: i),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(18),
               child: utiliseSecours
                   ? Image.asset(secours[i], width: 302, height: 170, fit: BoxFit.cover)
                   : CachedNetworkImage(
-                      imageUrl: distantes[i],
+                      imageUrl: imageOptimisee(distantes[i], largeur: 302),
                       width: 302,
                       height: 170,
                       fit: BoxFit.cover,
@@ -645,7 +679,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                 itemCount: count + 1, // +1 : carte "Voir tous"
                 separatorBuilder: (_, __) => const SizedBox(width: 14),
                 itemBuilder: (context, i) {
-                  if (i == count) return _buildVoirTousCard();
+                  if (i == count) return _buildVoirTousCard('a_ne_pas_rater');
                   final g = _adGradients[i % _adGradients.length];
                   final darkText = i % _adGradients.length == 1;
                   final ad = _adsDefault[i];
@@ -733,10 +767,19 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildVoirTousCard() {
+  /// Carte de fin de carrousel menant à toutes les promotions de la section.
+  ///
+  /// Elle renvoyait vers l'ensemble des promotions du catalogue, toutes
+  /// sections confondues : on reste désormais dans la section parcourue.
+  Widget _buildVoirTousCard(String section) {
     return GestureDetector(
       onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const PromotionsActivesPage()),
+        MaterialPageRoute(
+          builder: (_) => SectionPromotionsPage(
+            section: section,
+            titre: _titresSections[section] ?? 'Promotions',
+          ),
+        ),
       ),
       child: Container(
         width: 120,
@@ -903,7 +946,12 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                 const Spacer(),
                 GestureDetector(
                   onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const PromotionsActivesPage()),
+                    MaterialPageRoute(
+                      builder: (_) => SectionPromotionsPage(
+                        section: 'nos_promos_a_venir',
+                        titre: _titresSections['nos_promos_a_venir']!,
+                      ),
+                    ),
                   ),
                   child: Text('Voir tout',
                       style: GoogleFonts.dmSans(

@@ -6,6 +6,16 @@ import '../models/bloc_promo_model.dart';
 
 abstract class PromotionsRemoteDataSource {
   Future<List<PromotionModel>> promotionsActives();
+
+  /// Promotions rattachées à une section de l'accueil.
+  Future<List<PromotionModel>> promotionsSection(String section);
+
+  /// Produits d'une sous-section donnée.
+  ///
+  /// Sans cela, toutes les sous-sections d'une même section affichaient la
+  /// même liste, celle de la section entière.
+  Future<List<PromotionModel>> produitsDuBloc(String blocId);
+
   Future<List<BlocPromoModel>> blocsPromo();
   Future<List<PromotionModel>> mesPromotions();
   Future<PromotionModel> creerPromotion({
@@ -52,6 +62,34 @@ class PromotionsRemoteDataSourceImpl implements PromotionsRemoteDataSource {
   Future<List<PromotionModel>> promotionsActives() async {
     final res = await dio.get(PromotionsEndpoints.actives);
     return _extractList(res.data)
+        .map((e) => PromotionModel.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  @override
+  Future<List<PromotionModel>> promotionsSection(String section) async {
+    final res = await dio.get(PromotionsEndpoints.section(section));
+    // La réponse enveloppe la liste : { data: { promotions: [...] } }.
+    final raw = res.data;
+    final data = raw is Map ? raw['data'] : null;
+    final liste = data is Map && data['promotions'] is List
+        ? data['promotions'] as List
+        : _extractList(raw);
+    return liste
+        .map((e) => PromotionModel.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  @override
+  Future<List<PromotionModel>> produitsDuBloc(String blocId) async {
+    final res = await dio.get(PromotionsEndpoints.produitsDuBloc(blocId));
+    // Même enveloppe que les sections : { data: { bloc, promotions: [...] } }.
+    final raw = res.data;
+    final data = raw is Map ? raw['data'] : null;
+    final liste = data is Map && data['promotions'] is List
+        ? data['promotions'] as List
+        : _extractList(raw);
+    return liste
         .map((e) => PromotionModel.fromJson(e as Map<String, dynamic>))
         .toList();
   }
