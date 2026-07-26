@@ -2,6 +2,8 @@ import 'package:dio/dio.dart';
 import '../../../../core/routes/app_router.dart';
 import '../models/produit_model.dart';
 import '../models/boutique_model.dart';
+import '../models/rayon_model.dart';
+import '../../../../features/promotions/data/models/promo_groupee_model.dart';
 import '../../../../core/services/token_service.dart';
 import '../../../../injection_container.dart';
 import '../../../../core/connection/auth_interceptor.dart';
@@ -30,6 +32,16 @@ abstract class ProduitRemoteDataSource {
   });
   // Boutiques proches (géolocalisation)
   Future<List<BoutiqueModel>> getBoutiquesProches(double lat, double lng, {double rayon});
+  // Rayons
+  Future<List<RayonModel>> getRayons();
+  Future<List<dynamic>> getProduitsDuRayon(String rayonId,
+      {String? sousRayonId, String? search, int page = 1, int limit = 20});
+  Future<List<dynamic>> getProduitsDuSousRayon(String sousRayonId,
+      {String? search, int page = 1, int limit = 20});
+  // Promotions groupées
+  Future<PromoGroupeeModel> getPromotionsGroupees();
+  // Bannières
+  Future<List<dynamic>> getBannieres();
 }
 
 class ProduitRemoteDataSourceImpl implements ProduitRemoteDataSource {
@@ -352,6 +364,115 @@ class ProduitRemoteDataSourceImpl implements ProduitRemoteDataSource {
           .map((e) => ProduitModel.fromJson(e as Map<String, dynamic>))
           .toList();
 
+    } catch (e) {
+      _handleAuthError(e);
+      rethrow;
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // 🗂️ Rayons
+  // ─────────────────────────────────────────────
+  @override
+  Future<List<RayonModel>> getRayons() async {
+    try {
+      final response = await dio.get(
+        RayonEndpoints.rayons,
+        options: await _getOptions(),
+      );
+      final data = _extractList(response.data);
+      return data
+          .map((e) => RayonModel.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      _handleAuthError(e);
+      rethrow;
+    }
+  }
+
+  @override
+  Future<List<dynamic>> getProduitsDuRayon(
+    String rayonId, {
+    String? sousRayonId,
+    String? search,
+    int page = 1,
+    int limit = 20,
+  }) async {
+    try {
+      final response = await dio.get(
+        RayonEndpoints.produitsDuRayon(rayonId),
+        queryParameters: {
+          'page': page,
+          'limit': limit,
+          if (sousRayonId != null) 'sousRayonId': sousRayonId,
+          if (search != null) 'search': search,
+        },
+        options: await _getOptions(),
+      );
+      return _extractList(response.data);
+    } catch (e) {
+      _handleAuthError(e);
+      rethrow;
+    }
+  }
+
+  @override
+  Future<List<dynamic>> getProduitsDuSousRayon(
+    String sousRayonId, {
+    String? search,
+    int page = 1,
+    int limit = 20,
+  }) async {
+    try {
+      final response = await dio.get(
+        RayonEndpoints.produitsduSousRayon(sousRayonId),
+        queryParameters: {
+          'page': page,
+          'limit': limit,
+          if (search != null) 'search': search,
+        },
+        options: await _getOptions(),
+      );
+      return _extractList(response.data);
+    } catch (e) {
+      _handleAuthError(e);
+      rethrow;
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // 🎯 Promotions groupées
+  // ─────────────────────────────────────────────
+  @override
+  Future<PromoGroupeeModel> getPromotionsGroupees() async {
+    try {
+      final response = await dio.get(
+        PromotionEndpoints.groupees,
+        options: await _getOptions(),
+      );
+      final data = response.data;
+      // Le backend peut renvoyer { success, data: { ... } } ou directement l'objet.
+      final payload = (data is Map && data['data'] is Map)
+          ? data['data'] as Map<String, dynamic>
+          : (data is Map ? data as Map<String, dynamic> : <String, dynamic>{});
+      return PromoGroupeeModel.fromJson(payload);
+    } catch (e) {
+      _handleAuthError(e);
+      rethrow;
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // 🖼️ Bannières
+  // ─────────────────────────────────────────────
+  @override
+  Future<List<dynamic>> getBannieres() async {
+    try {
+      final response = await dio.get(
+        BanniereEndpoints.bannieres,
+        options: await _getOptions(),
+      );
+      return _extractList(response.data);
     } catch (e) {
       _handleAuthError(e);
       rethrow;

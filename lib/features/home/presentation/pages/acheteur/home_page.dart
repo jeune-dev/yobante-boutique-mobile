@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -11,6 +12,8 @@ import '../../../data/repositories/produit_repository_impl.dart';
 import '../../../data/datasources/produit_remote_datasource.dart';
 import '../../../data/models/produit_model.dart';
 import '../../../data/models/boutique_model.dart';
+import '../../../data/models/rayon_model.dart';
+import '../../../../../features/promotions/data/models/promo_groupee_model.dart';
 import '../../../../../core/services/token_service.dart';
 import '../../../../../injection_container.dart';
 import '../../../../../core/services/whatsapp_service.dart';
@@ -28,6 +31,7 @@ import 'boutiques_page.dart';
 import 'produit_detail_page.dart';
 import 'produit_page.dart';
 import 'categorie_produits_page.dart';
+import 'rayon_produits_page.dart';
 import 'profil_page.dart';
 import '../../../../notifications/presentation/pages/notifications_page.dart';
 import '../../../../auth/presentation/pages/login_page.dart';
@@ -101,6 +105,11 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   // Découverte (endpoints backend jusque-là inexploités)
   List<ProduitModel>  _tendances = [];
   List<BoutiqueModel> _nouvelles = [];
+
+  // API : rayons, bannières, promotions groupées
+  List<RayonModel>  _rayonsApi        = [];
+  List<dynamic>     _banniersList     = [];
+  PromoGroupeeModel? _promoGroupee;
 
   late AnimationController _headerCtrl;
   late Animation<double>   _headerFade;
@@ -196,10 +205,28 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
         setState(() { _dataSource = dataSource; _produitBloc = bloc; });
         _fetchBoutiques();
         _fetchDecouverte();
+        _fetchRayons();
+        _fetchPromosGroupees();
       }
     } catch (e) {
       debugPrint('Erreur init bloc: $e');
     }
+  }
+
+  Future<void> _fetchRayons() async {
+    if (_dataSource == null) return;
+    try {
+      final list = await _dataSource!.getRayons();
+      if (mounted) setState(() => _rayonsApi = list);
+    } catch (_) {/* fallback sur les rayons statiques */}
+  }
+
+  Future<void> _fetchPromosGroupees() async {
+    if (_dataSource == null) return;
+    try {
+      final promo = await _dataSource!.getPromotionsGroupees();
+      if (mounted) setState(() => _promoGroupee = promo);
+    } catch (_) {/* fallback sur les blocs promo existants */}
   }
 
   Future<void> _fetchBoutiques() async {
@@ -306,7 +333,14 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             child: RefreshIndicator(
               onRefresh: () async {
                 _produitBloc?.add(LoadProduits());
-                await Future.wait([_loadStats(), _fetchBoutiques(), _fetchDecouverte()]);
+                await Future.wait([
+                  _loadStats(),
+                  _fetchBoutiques(),
+                  _fetchDecouverte(),
+                  _fetchRayons(),
+                  _fetchBannieres(),
+                  _fetchPromosGroupees(),
+                ]);
               },
               color: _C.green,
               backgroundColor: _C.white,
@@ -556,6 +590,14 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
   // ── Bloc "Nos promos du moment" (bannières images + Voir tous) ──────────────
   Widget _buildNosPromosDuMoment() {
+    // Priorité : promotions groupées API → blocs dashboard → assets locaux
+    final apiPromos = _promoGroupee?.nosPromosDuMoment ?? [];
+    final apiImages = apiPromos
+        .whereType<Map>()
+        .map((p) => (p['image'] ?? p['produit']?['image'] ?? '').toString())
+        .where((url) => url.isNotEmpty)
+        .toList();
+
     return Padding(
       padding: const EdgeInsets.only(top: 22),
       child: Column(
@@ -652,6 +694,14 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
   // ── Bloc "À ne pas manquer" (sélection éditoriale, même design) ─────────────
   Widget _buildANePasManquer() {
+    // Promotions "à ne pas rater" depuis l'API si disponibles
+    final apiPromos = _promoGroupee?.aNesPasRater ?? [];
+    final apiImages = apiPromos
+        .whereType<Map>()
+        .map((p) => (p['image'] ?? p['produit']?['image'] ?? '').toString())
+        .where((url) => url.isNotEmpty)
+        .toList();
+
     final int count = _adsDefault.length;
     return Padding(
       padding: const EdgeInsets.only(top: 22),
@@ -826,6 +876,9 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   ];
 
   Widget _buildNosRayons() {
+    // Utiliser les rayons API si disponibles, sinon les rayons statiques.
+    final hasApiRayons = _rayonsApi.isNotEmpty;
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(18, 26, 18, 0),
       child: Column(
@@ -849,20 +902,83 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             ],
           ),
           const SizedBox(height: 14),
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            padding: EdgeInsets.zero,
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 4,
-              crossAxisSpacing: 10,
-              mainAxisSpacing: 10,
-              childAspectRatio: 0.82,
+          if (hasApiRayons)
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              padding: EdgeInsets.zero,
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 4,
+                crossAxisSpacing: 10,
+                mainAxisSpacing: 10,
+                childAspectRatio: 0.82,
+              ),
+              itemCount: _rayonsApi.length,
+              itemBuilder: (_, i) => _buildRayonApiCard(_rayonsApi[i]),
+            )
+          else
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              padding: EdgeInsets.zero,
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 4,
+                crossAxisSpacing: 10,
+                mainAxisSpacing: 10,
+                childAspectRatio: 0.82,
+              ),
+              itemCount: _rayons.length,
+              itemBuilder: (_, i) => _buildRayonCard(_rayons[i]),
             ),
-            itemCount: _rayons.length,
-            itemBuilder: (_, i) => _buildRayonCard(_rayons[i]),
-          ),
         ],
+      ),
+    );
+  }
+
+  // Carte rayon provenant de l'API (RayonModel).
+  Widget _buildRayonApiCard(RayonModel rayon) {
+    final hasImage = rayon.image != null && rayon.image!.isNotEmpty;
+    return GestureDetector(
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => RayonProduitsPage(rayon: rayon),
+        ),
+      ),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+        decoration: BoxDecoration(
+          color: _C.green,
+          borderRadius: BorderRadius.circular(15),
+          boxShadow: [
+            BoxShadow(
+                color: _C.green.withOpacity(0.18),
+                blurRadius: 10, offset: const Offset(0, 5)),
+          ],
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (hasImage)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: CachedNetworkImage(
+                  imageUrl: rayon.image!,
+                  width: 28, height: 28, fit: BoxFit.cover,
+                  errorWidget: (_, __, ___) =>
+                      const Icon(Icons.category_rounded, color: _C.white, size: 21),
+                ),
+              )
+            else
+              const Icon(Icons.category_rounded, color: _C.white, size: 21),
+            const SizedBox(height: 6),
+            Text(rayon.nom,
+                textAlign: TextAlign.center,
+                maxLines: 2, overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.dmSans(
+                    fontSize: 9.5, fontWeight: FontWeight.w700,
+                    color: _C.white, height: 1.1)),
+          ],
+        ),
       ),
     );
   }
@@ -977,12 +1093,15 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(18),
                     child: isNetwork
-                        ? Image.network(
-                            imgs[i],
+                        ? CachedNetworkImage(
+                            imageUrl: imgs[i],
                             width: bannerW,
                             height: bannerH,
                             fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                            errorWidget: (_, __, ___) => Container(
+                              color: _C.greenLight,
+                              child: const Icon(Icons.image_outlined, color: _C.label),
+                            ),
                           )
                         : Image.asset(
                             imgs[i],

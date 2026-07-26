@@ -5,6 +5,8 @@ import 'package:yobante/features/auth/presentation/pages/onboarding_page.dart';
 import 'package:yobante/features/home/presentation/pages/home.dart';
 import 'package:yobante/features/home/presentation/pages/acheteur/main_client_page.dart';
 import 'package:yobante/features/home/presentation/pages/vendeur/main_vendeur_page.dart';
+import 'package:yobante/features/home/presentation/pages/acheteur/rayon_produits_page.dart';
+import 'package:yobante/features/home/data/models/rayon_model.dart';
 import 'package:yobante/features/auth/domain/entities/user.dart';
 import 'package:yobante/features/commande/presentation/pages/panier_page.dart';
 import 'package:yobante/features/commande/presentation/pages/checkout_page.dart';
@@ -24,6 +26,7 @@ class AppRouter {
   static const String mesCommandesRoute = '/mes-commandes';
   static const String commandeDetailRoute = '/commande-detail';
   static const String forgotPasswordRoute = '/forgot-password';
+  static const String rayonProduitsRoute = '/rayon-produits';
 
   /// Écran d'accueil correspondant à un rôle.
   ///
@@ -77,6 +80,11 @@ class AppRouter {
 
       case forgotPasswordRoute:
         return MaterialPageRoute(builder: (_) => const ForgotPasswordPage());
+
+      case rayonProduitsRoute:
+        final rayon = settings.arguments as RayonModel;
+        return MaterialPageRoute(
+            builder: (_) => RayonProduitsPage(rayon: rayon));
 
       default:
         // Yobante Boutique = application 100% client : par défaut on ouvre
