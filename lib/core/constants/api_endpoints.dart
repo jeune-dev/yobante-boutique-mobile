@@ -159,6 +159,7 @@ class BanniereEndpoints {
   BanniereEndpoints._();
 
   static const actives = '/bannieres';
+  static String get bannieres => '/bannieres';
 }
 
 /// Promotions.
@@ -191,13 +192,6 @@ class PromotionEndpoints {
   PromotionEndpoints._();
 
   static String get groupees => '/promotions/groupees';
-}
-
-/// Bannières de la page d'accueil.
-class BanniereEndpoints {
-  BanniereEndpoints._();
-
-  static String get bannieres => '/bannieres';
 }
 
 /// Signalements.
