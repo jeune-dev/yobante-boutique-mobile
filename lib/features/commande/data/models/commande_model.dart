@@ -51,6 +51,7 @@ class CommandeModel {
   final String? note;
   final DateTime? createdAt;
   final List<LigneCommandeModel> lignes;
+  final String? motifRejet;
 
   // Infos de l'autre partie (selon le point de vue)
   final String? acheteurNom;
@@ -75,6 +76,7 @@ class CommandeModel {
     required this.note,
     required this.createdAt,
     required this.lignes,
+    this.motifRejet,
     this.acheteurNom,
     this.acheteurTelephone,
     this.vendeurNom,
@@ -116,6 +118,7 @@ class CommandeModel {
           ? DateTime.tryParse(json['createdAt'].toString())
           : null,
       lignes: lignes,
+      motifRejet: json['motifRejet'],
       acheteurNom: joinNom(acheteur),
       acheteurTelephone: acheteur?['telephone'],
       vendeurNom: joinNom(vendeur),
@@ -139,4 +142,6 @@ const Map<String, String> kStatutCommandeLabels = {
   'en_livraison': 'En livraison',
   'livree': 'Livrée',
   'annulee': 'Annulée',
+  'rejetee': 'Rejetée',
+  'validee': 'Validée',
 };

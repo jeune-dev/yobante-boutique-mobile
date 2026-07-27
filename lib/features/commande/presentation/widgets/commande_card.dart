@@ -80,7 +80,9 @@ class CommandeCard extends StatelessWidget {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          dateFormat.format(commande.createdAt),
+                          commande.createdAt != null
+                              ? dateFormat.format(commande.createdAt!)
+                              : '—',
                           style: GoogleFonts.dmSans(
                             fontSize: 12,
                             color: _C.sub,
@@ -135,8 +137,9 @@ class CommandeCard extends StatelessWidget {
                             const SizedBox(width: 8),
                         itemBuilder: (context, i) {
                           final ligne = commande.lignes[i];
-                          final images =
-                              ligne.produit?.images ?? [];
+                          final images = ligne.imageProduit != null
+                              ? [ligne.imageProduit!]
+                              : [];
                           return Stack(
                             children: [
                               Container(
