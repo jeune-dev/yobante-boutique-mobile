@@ -1,5 +1,8 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../data/models/panier_item.dart';
+import '../../data/services/panier_service.dart';
+import '../../../../injection_container.dart';
 import '../../data/repositories/commande_repository.dart';
 import 'commande_event.dart';
 import 'commande_state.dart';
@@ -40,9 +43,26 @@ class CommandeBloc extends Bloc<CommandeEvent, CommandeState> {
       CreerCommande event, Emitter<CommandeState> emit) async {
     emit(CommandeLoading());
     try {
+      final panier = sl<PanierService>();
+
+      // Si vendeurId est spécifié, prendre seulement ses articles ; sinon tous
+      final List<PanierItem> items;
+      if (event.vendeurId != null) {
+        items = panier.parVendeur[event.vendeurId!] ?? [];
+      } else {
+        // Tous les articles de tous les vendeurs
+        items = panier.parVendeur.values.expand((e) => e).toList();
+      }
+
+      // Convertir les items en format attendu par le backend
+      final itemsData = items
+          .map((item) => {'produitId': item.produitId, 'quantite': item.quantite})
+          .toList();
+
       final commande = await repository.creerCommande(
         adresseId: event.adresseId,
         methode: event.methode,
+        items: itemsData,
         note: event.note,
       );
       emit(CommandeCreee(commande));

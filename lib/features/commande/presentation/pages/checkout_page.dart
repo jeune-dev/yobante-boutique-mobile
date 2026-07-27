@@ -121,6 +121,7 @@ class _CheckoutViewState extends State<_CheckoutView> {
     context.read<CommandeBloc>().add(CreerCommande(
           adresseId: _adresseId!,
           methode: _methode,
+          vendeurId: widget.vendeurId,
           note: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
         ));
   }

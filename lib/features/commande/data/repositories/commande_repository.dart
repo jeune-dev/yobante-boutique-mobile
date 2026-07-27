@@ -8,16 +8,17 @@ class CommandeRepository {
   final CommandeRemoteDataSource remote;
   CommandeRepository(this.remote);
 
-  /// Le panier est côté serveur : la commande ne transmet donc pas les lignes,
-  /// seulement l'adresse de livraison et le mode de règlement retenu.
+  /// Le panier est côté client (PanierService) : on l'envoie au backend avec la commande.
   Future<CommandeModel> creerCommande({
     required String adresseId,
     required String methode,
+    required List<Map<String, dynamic>> items,
     String? note,
   }) {
     return remote.creerCommande({
       'adresseId': adresseId,
       'methode': methode,
+      'items': items,
       if (note != null && note.isNotEmpty) 'note': note,
     });
   }

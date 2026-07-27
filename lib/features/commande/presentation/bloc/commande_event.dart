@@ -15,22 +15,24 @@ class LoadMesCommandes extends CommandeEvent {
 
 /// Acheteur : créer une commande à partir du panier.
 ///
-/// Le panier est tenu côté serveur : seuls l'adresse de livraison et le mode
-/// de règlement sont transmis. Le mode choisi ici détermine le fournisseur de
-/// paiement utilisé ensuite.
+/// Le panier est tenu côté client (PanierService) : il est envoyé avec la
+/// commande. Si vendeurId est null, on prend tous les articles, sinon
+/// seulement ceux de ce vendeur.
 class CreerCommande extends CommandeEvent {
   final String adresseId;
   final String methode; // wave | orange_money | carte | cash_livraison
+  final String? vendeurId; // Si null, tous les articles ; sinon, seulement ceux de ce vendeur
   final String? note;
 
   CreerCommande({
     required this.adresseId,
     required this.methode,
+    this.vendeurId,
     this.note,
   });
 
   @override
-  List<Object?> get props => [adresseId, methode, note];
+  List<Object?> get props => [adresseId, methode, vendeurId, note];
 }
 
 /// Acheteur : lancer le règlement d'une commande déjà créée
