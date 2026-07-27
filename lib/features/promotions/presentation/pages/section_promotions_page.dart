@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:intl/intl.dart';
 
 import '../../../../core/utils/image_cloudinary.dart';
 import '../../../../injection_container.dart';
@@ -180,30 +181,103 @@ class _SectionPromotionsPageState extends State<SectionPromotionsPage> {
   }
 
   Widget _carte(PromotionModel promotion) {
+    final stock = promotion.produitStock ?? 0;
+    final prixOriginal = promotion.produitPrix ?? 0.0;
+    final reduction = promotion.pourcentageReduction;
+
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(10),
+      margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
         color: _C.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _C.border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          )
+        ],
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: promotion.image.isNotEmpty
-                ? CachedNetworkImage(
-                    imageUrl: imageOptimisee(promotion.image, largeur: 68),
-                    width: 68,
-                    height: 68,
-                    fit: BoxFit.cover,
-                    errorWidget: (_, __, ___) => _vignetteVide(),
-                  )
-                : _vignetteVide(),
+          Stack(
+            children: [
+              ClipRRect(
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(16),
+                  topRight: Radius.circular(16),
+                ),
+                child: promotion.image.isNotEmpty
+                    ? CachedNetworkImage(
+                        imageUrl: imageOptimisee(
+                          promotion.image,
+                          largeur: MediaQuery.of(context).size.width.round(),
+                        ),
+                        width: double.infinity,
+                        height: 200,
+                        fit: BoxFit.cover,
+                        placeholder: (_, __) => Container(
+                          height: 200,
+                          color: _C.bg,
+                          child: const Icon(Icons.image_not_supported_outlined,
+                              color: _C.sub),
+                        ),
+                      )
+                    : Container(
+                        width: double.infinity,
+                        height: 200,
+                        color: _C.bg,
+                        child: const Icon(Icons.image_not_supported_outlined,
+                            color: _C.sub, size: 40),
+                      ),
+              ),
+              if (reduction > 0)
+                Positioned(
+                  top: 12,
+                  right: 12,
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE53E3E),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      '-${reduction.toStringAsFixed(0)}%',
+                      style: const TextStyle(
+                        color: _C.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                ),
+              if (stock > 0)
+                Positioned(
+                  bottom: 12,
+                  left: 12,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: _C.white,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      '$stock en stock',
+                      style: GoogleFonts.dmSans(
+                        color: _C.green,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
           ),
-          const SizedBox(width: 12),
-          Expanded(
+          Padding(
+            padding: const EdgeInsets.all(14),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -213,44 +287,86 @@ class _SectionPromotionsPageState extends State<SectionPromotionsPage> {
                   overflow: TextOverflow.ellipsis,
                   style: GoogleFonts.dmSans(
                     fontWeight: FontWeight.w700,
-                    fontSize: 14,
+                    fontSize: 15,
                     color: _C.black,
                   ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 6),
+                if ((promotion.description ?? '').isNotEmpty)
+                  Text(
+                    promotion.description ?? '',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.dmSans(
+                      fontSize: 12,
+                      color: _C.sub,
+                      height: 1.4,
+                    ),
+                  ),
+                if ((promotion.description ?? '').isNotEmpty)
+                  const SizedBox(height: 8),
                 Row(
                   children: [
+                    if (prixOriginal > 0)
+                      Text(
+                        '${prixOriginal.toStringAsFixed(0)} FCFA',
+                        style: GoogleFonts.dmSans(
+                          color: _C.sub,
+                          fontSize: 12,
+                          decoration: TextDecoration.lineThrough,
+                        ),
+                      ),
+                    if (prixOriginal > 0) const SizedBox(width: 8),
                     Text(
-                      '${promotion.prixPromo} FCFA',
+                      '${promotion.prixPromo.toStringAsFixed(0)} FCFA',
                       style: GoogleFonts.dmSans(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 14,
                         color: _C.green,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
                       ),
                     ),
-                    if (promotion.pourcentageReduction > 0) ...[
-                      const SizedBox(width: 8),
-                      Container(
-                        padding:
-                            const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: _C.or,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          '−${promotion.pourcentageReduction} %',
-                          style: GoogleFonts.dmSans(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w800,
-                            color: _C.black,
-                          ),
-                        ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
+                    if (promotion.dateDebut != null)
+                      _tagDate(
+                        'Dès le ${DateFormat("dd/MM").format(promotion.dateDebut!)}',
+                        Icons.calendar_today,
                       ),
-                    ],
+                    if (promotion.dateFin != null)
+                      _tagDate(
+                        'Jusqu\'au ${DateFormat("dd/MM").format(promotion.dateFin!)}',
+                        Icons.schedule,
+                      ),
                   ],
                 ),
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _tagDate(String texte, IconData icone) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: _C.bg,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icone, size: 12, color: _C.sub),
+          const SizedBox(width: 4),
+          Text(
+            texte,
+            style: GoogleFonts.dmSans(fontSize: 10, color: _C.sub),
           ),
         ],
       ),

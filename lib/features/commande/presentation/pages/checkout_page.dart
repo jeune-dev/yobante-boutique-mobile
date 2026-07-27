@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../../injection_container.dart';
 import '../../../../core/routes/app_router.dart';
+import '../../../../core/widgets/app_message.dart';
 import '../../data/models/adresse_model.dart';
 import '../../data/models/paiement_model.dart';
 import '../../data/repositories/commande_repository.dart';
@@ -110,12 +111,7 @@ class _CheckoutViewState extends State<_CheckoutView> {
   void _soumettre(BuildContext context) {
     if (!_formKey.currentState!.validate()) return;
     if (_adresseId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Ajoutez une adresse de livraison depuis votre profil'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      AppMessage.error(context, 'Ajoutez une adresse de livraison depuis votre profil');
       return;
     }
     context.read<CommandeBloc>().add(CreerCommande(
@@ -147,9 +143,7 @@ class _CheckoutViewState extends State<_CheckoutView> {
       body: BlocConsumer<CommandeBloc, CommandeState>(
         listener: (context, state) async {
           if (state is CommandeError) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(state.message), backgroundColor: Colors.red),
-            );
+            AppMessage.error(context, state.message);
           } else if (state is CommandeCreee) {
             // La commande existe : on enchaîne sur le règlement, quel que soit
             // le mode. C'est le serveur qui sait s'il y a une page à ouvrir.
@@ -160,14 +154,11 @@ class _CheckoutViewState extends State<_CheckoutView> {
               await _ouvrirPaiement(context, state.paiement);
             }
             if (context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    state.paiement.demandeUneAction
-                        ? 'Finalisez le paiement puis revenez : le statut se met à jour ici.'
-                        : 'Commande confirmée — réglez à la livraison.',
-                  ),
-                ),
+              AppMessage.success(
+                context,
+                state.paiement.demandeUneAction
+                    ? 'Finalisez le paiement puis revenez : le statut se met à jour ici.'
+                    : 'Commande confirmée — réglez à la livraison.',
               );
               _allerMesCommandes(context);
             }

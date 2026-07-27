@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../injection_container.dart';
+import '../../../../core/widgets/app_message.dart';
 import '../bloc/abonnement_bloc.dart';
 import '../bloc/abonnement_event.dart';
 import '../bloc/abonnement_state.dart';
@@ -43,39 +45,140 @@ class _MonAbonnementViewState extends State<_MonAbonnementView> {
   Future<void> _renouveler(BuildContext context) async {
     final numeroCtrl = TextEditingController();
     String methode = 'orange_money';
-    final res = await showDialog<bool>(
+    final res = await showModalBottomSheet<bool>(
       context: context,
+      isDismissible: true,
+      enableDrag: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+      ),
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setStateDialog) => AlertDialog(
-          title: const Text('Renouveler mon abonnement'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: numeroCtrl,
-                keyboardType: TextInputType.phone,
-                decoration: const InputDecoration(labelText: 'Numéro de téléphone'),
-              ),
-              const SizedBox(height: 12),
-              DropdownButton<String>(
-                value: methode,
-                isExpanded: true,
-                items: const [
-                  DropdownMenuItem(value: 'orange_money', child: Text('Orange Money')),
-                  DropdownMenuItem(value: 'wave', child: Text('Wave')),
-                ],
-                onChanged: (v) => setStateDialog(() => methode = v ?? 'orange_money'),
-              ),
-            ],
+        builder: (ctx, setStateDialog) => Container(
+          decoration: const BoxDecoration(
+            color: Color(0xFFFFFFFF),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
           ),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Annuler')),
-            TextButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('Payer')),
-          ],
+          padding: const EdgeInsets.fromLTRB(20, 28, 20, 36),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Renouveler mon abonnement',
+                  style: GoogleFonts.sora(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    color: const Color(0xFF1A1A1A),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  'Numéro de téléphone',
+                  style: GoogleFonts.dmSans(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF1A1A1A),
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: numeroCtrl,
+                  keyboardType: TextInputType.phone,
+                  style: GoogleFonts.dmSans(fontSize: 15, fontWeight: FontWeight.w500),
+                  decoration: InputDecoration(
+                    hintText: 'Ex: 773071639',
+                    hintStyle: GoogleFonts.dmSans(color: const Color(0xFFC2C9D6)),
+                    filled: true,
+                    fillColor: const Color(0xFFF7F9FC),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Color(0xFFDDE3EF)),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Color(0xFFDDE3EF)),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  'Méthode de paiement',
+                  style: GoogleFonts.dmSans(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF1A1A1A),
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: const Color(0xFFDDE3EF)),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: DropdownButton<String>(
+                    value: methode,
+                    isExpanded: true,
+                    underline: const SizedBox(),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    items: const [
+                      DropdownMenuItem(value: 'orange_money', child: Text('Orange Money')),
+                      DropdownMenuItem(value: 'wave', child: Text('Wave')),
+                    ],
+                    onChanged: (v) => setStateDialog(() => methode = v ?? 'orange_money'),
+                  ),
+                ),
+                const SizedBox(height: 32),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(ctx, false),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFF163A9E),
+                          side: const BorderSide(color: Color(0xFFDDE3EF)),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: Text(
+                          'Annuler',
+                          style: GoogleFonts.sora(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.pop(ctx, true),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF163A9E),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: Text(
+                          'Payer',
+                          style: GoogleFonts.sora(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -112,9 +215,7 @@ class _MonAbonnementViewState extends State<_MonAbonnementView> {
       body: BlocConsumer<AbonnementBloc, AbonnementState>(
         listener: (context, state) async {
           if (state is AbonnementError) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(state.message), backgroundColor: Colors.red),
-            );
+            AppMessage.error(context, state.message);
           } else if (state is PaiementInitieAbonnement) {
             final url = state.paymentUrl;
             if (url != null && url.isNotEmpty) {

@@ -167,29 +167,42 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                     position: _slideAnim,
                     child: ScaleTransition(
                       scale: _scaleAnim,
-                      child: SingleChildScrollView(
-                        physics: const BouncingScrollPhysics(),
-                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
                         child: Form(
                           key: _formKey,
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const SizedBox(height: 20),
+                              const SizedBox(height: 12),
                               _buildBackButton(),
-                              const SizedBox(height: 18),
-                              _buildBadge(),
-                              const SizedBox(height: 22),
-                              _buildHeader(),
-                              const SizedBox(height: 32),
-                              FadeTransition(
-                                opacity: _cardFade,
-                                child: SlideTransition(
-                                  position: _cardSlide,
-                                  child: _buildCard(isLoading),
+                              const SizedBox(height: 24),
+                              Expanded(
+                                child: SingleChildScrollView(
+                                  physics: const BouncingScrollPhysics(),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      _buildBadge(),
+                                      const SizedBox(height: 28),
+                                      _buildHeader(),
+                                      const SizedBox(height: 40),
+                                      FadeTransition(
+                                        opacity: _cardFade,
+                                        child: SlideTransition(
+                                          position: _cardSlide,
+                                          child: _buildCard(isLoading),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
-                              const SizedBox(height: 40),
+                              const SizedBox(height: 24),
+                              _buildDivider(),
+                              const SizedBox(height: 24),
+                              _buildRegisterLink(),
+                              const SizedBox(height: 12),
                             ],
                           ),
                         ),
@@ -381,23 +394,23 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   // ── Carte principale ───────────────────────────────────────────────────────
   Widget _buildCard(bool isLoading) {
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(28),
       decoration: BoxDecoration(
-        color: _C.white.withOpacity(0.95),
+        color: _C.white,
         borderRadius: BorderRadius.circular(28),
         border: Border.all(
-          color: _C.white.withOpacity(0.8),
-          width: 1,
+          color: _C.border,
+          width: 0.8,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 40,
-            offset: const Offset(0, 8),
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 32,
+            offset: const Offset(0, 10),
           ),
           BoxShadow(
-            color: _C.green.withOpacity(0.04),
-            blurRadius: 20,
+            color: _C.green.withOpacity(0.06),
+            blurRadius: 16,
             offset: const Offset(0, 4),
           ),
         ],
@@ -406,20 +419,16 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildFieldLabel('E-mail ou téléphone'),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           _buildEmailField(),
-          const SizedBox(height: 20),
+          const SizedBox(height: 24),
           _buildFieldLabel('Mot de passe'),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           _buildPasswordField(),
-          const SizedBox(height: 14),
+          const SizedBox(height: 16),
           _buildForgotLink(),
-          const SizedBox(height: 28),
+          const SizedBox(height: 32),
           _buildLoginButton(isLoading),
-          const SizedBox(height: 22),
-          _buildDivider(),
-          const SizedBox(height: 22),
-          _buildRegisterLink(),
         ],
       ),
     );

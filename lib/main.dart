@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:yobante/core/connection/auth_interceptor.dart';
 import 'package:yobante/core/services/push_service.dart';
+import 'package:yobante/core/services/error_handler_service.dart';
 
 
 
@@ -68,8 +69,23 @@ void main() async {
   });
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Initialiser le ErrorHandlerService avec le navigateur
+    if (AuthInterceptor.navigatorKey.currentState != null) {
+      di.sl<ErrorHandlerService>()
+          .initialize(AuthInterceptor.navigatorKey.currentState!);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {

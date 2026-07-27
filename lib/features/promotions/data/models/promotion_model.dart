@@ -9,6 +9,8 @@ class PromotionModel {
   final String titre;
   final String description;
   final double prixPromo;
+  final double? produitPrix;
+  final int? produitStock;
   final DateTime? dateDebut;
   final DateTime? dateFin;
   final String produitId;
@@ -26,6 +28,8 @@ class PromotionModel {
     required this.titre,
     required this.description,
     required this.prixPromo,
+    this.produitPrix,
+    this.produitStock,
     this.dateDebut,
     this.dateFin,
     required this.produitId,
@@ -48,6 +52,8 @@ class PromotionModel {
       titre: json['titre']?.toString() ?? '',
       description: json['description']?.toString() ?? '',
       prixPromo: _toDouble(json['prixPromo']),
+      produitPrix: produit != null ? _toDouble(produit['prix']) : null,
+      produitStock: produit != null ? (produit['stock'] as int?) : null,
       dateDebut: json['dateDebut'] != null
           ? DateTime.tryParse(json['dateDebut'].toString())
           : null,

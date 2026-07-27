@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../../injection_container.dart';
+import '../../../../core/widgets/app_message.dart';
 import '../../data/models/commande_model.dart';
 import '../bloc/commande_bloc.dart';
 import '../bloc/commande_event.dart';
@@ -42,8 +44,40 @@ const Map<String, String> _statutSuivant = {
   'en_livraison': 'livree',
 };
 
-class CommandeDetailPage extends StatelessWidget {
+class CommandeDetailPage extends StatefulWidget {
   const CommandeDetailPage({super.key});
+
+  @override
+  State<CommandeDetailPage> createState() => _CommandeDetailPageState();
+}
+
+class _CommandeDetailPageState extends State<CommandeDetailPage> {
+  Timer? _pollingTimer;
+  late String _commandeId;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final args =
+        ModalRoute.of(context)?.settings.arguments as CommandeDetailArgs?;
+    _commandeId = args?.commande.id ?? '';
+    _startPolling();
+  }
+
+  void _startPolling() {
+    // Recharger la commande toutes les 15 secondes pour les mises à jour en temps réel
+    _pollingTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (mounted && _commandeId.isNotEmpty) {
+        context.read<CommandeBloc>().add(LoadMesCommandes());
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _pollingTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -100,14 +134,10 @@ class _DetailViewState extends State<_DetailView> {
       body: BlocConsumer<CommandeBloc, CommandeState>(
         listener: (context, state) async {
           if (state is CommandeError) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(state.message), backgroundColor: Colors.red),
-            );
+            AppMessage.error(context, state.message);
           } else if (state is CommandeMiseAJour) {
             setState(() => commande = state.commande);
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Commande mise à jour')),
-            );
+            AppMessage.success(context, 'Commande mise à jour');
           } else if (state is PaiementInitie) {
             final url = state.paiement.urlPaiement;
             if (url != null && url.isNotEmpty) {
@@ -122,9 +152,7 @@ class _DetailViewState extends State<_DetailView> {
               }
             }
           } else if (state is PaiementStatut) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Paiement : ${state.paiement.statutLibelle}')),
-            );
+            AppMessage.info(context, 'Paiement : ${state.paiement.statutLibelle}');
           }
         },
         builder: (context, state) {
@@ -157,8 +185,57 @@ class _DetailViewState extends State<_DetailView> {
                   ),
                   const SizedBox(height: 16),
 
-                  // Suivi (timeline) si non annulée
-                  if (commande.statut != 'annulee') _timeline(),
+                  // Affichage du motif de rejet
+                  if (commande.statut == 'rejetee' &&
+                      commande.motifRejet != null)
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEE2E2),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: const Color(0xFFFECACA),
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.info_outline,
+                                color: Colors.red.shade700,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Motif du rejet',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  color: Colors.red.shade700,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            commande.motifRejet!,
+                            style: TextStyle(
+                              color: Colors.red.shade900,
+                              fontSize: 13,
+                              height: 1.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  if (commande.statut == 'rejetee')
+                    const SizedBox(height: 16),
+
+                  // Suivi (timeline) si non annulée et non rejetée
+                  if (commande.statut != 'annulee' && commande.statut != 'rejetee')
+                    _timeline(),
 
                   const SizedBox(height: 16),
                   _carte('Articles', _articles()),

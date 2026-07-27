@@ -73,53 +73,157 @@ class _PromotionsActivesView extends StatelessWidget {
               child: ListView.separated(
                 padding: const EdgeInsets.all(16),
                 itemCount: state.promotions.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 12),
+                separatorBuilder: (_, __) => const SizedBox(height: 16),
                 itemBuilder: (context, i) {
                   final p = state.promotions[i];
+                  final prixOriginal = p.produitPrix ?? 0.0;
+                  final prixPromo = p.prixPromo;
+                  final reduction = p.pourcentageReduction ?? 0.0;
+
                   return Container(
                     decoration: BoxDecoration(
                       color: _C.white,
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: _C.border),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.08),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        )
+                      ],
                     ),
-                    padding: const EdgeInsets.all(10),
-                    child: Row(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: (p.produitImage ?? '').isNotEmpty
-                              ? CachedNetworkImage(
-                                  imageUrl: p.produitImage!,
-                                  width: 60,
-                                  height: 60,
-                                  fit: BoxFit.cover)
-                              : Container(
-                                  width: 60,
-                                  height: 60,
-                                  color: _C.bg,
-                                  child: const Icon(Icons.local_offer_outlined,
-                                      color: _C.sub)),
+                        Stack(
+                          children: [
+                            ClipRRect(
+                              borderRadius: const BorderRadius.only(
+                                topLeft: Radius.circular(16),
+                                topRight: Radius.circular(16),
+                              ),
+                              child: (p.produitImage ?? '').isNotEmpty
+                                  ? CachedNetworkImage(
+                                      imageUrl: p.produitImage!,
+                                      width: double.infinity,
+                                      height: 180,
+                                      fit: BoxFit.cover,
+                                      placeholder: (_, __) => Container(
+                                        color: _C.bg,
+                                        child: const Icon(Icons.local_offer_outlined,
+                                            color: _C.sub, size: 40),
+                                      ),
+                                    )
+                                  : Container(
+                                      width: double.infinity,
+                                      height: 180,
+                                      color: _C.bg,
+                                      child: const Icon(Icons.local_offer_outlined,
+                                          color: _C.sub, size: 40),
+                                    ),
+                            ),
+                            if (reduction > 0)
+                              Positioned(
+                                top: 12,
+                                right: 12,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 10, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFE53E3E),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    '-${reduction.toStringAsFixed(0)}%',
+                                    style: const TextStyle(
+                                      color: _C.white,
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
+                        Padding(
+                          padding: const EdgeInsets.all(14),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(p.titre,
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.w700, color: _C.black)),
-                              Text(p.produitNom ?? '',
-                                  style: const TextStyle(color: _C.sub, fontSize: 12)),
-                              const SizedBox(height: 2),
-                              Text('${p.prixPromo.toStringAsFixed(0)} FCFA',
-                                  style: const TextStyle(
+                              Text(
+                                p.produitNom ?? 'Produit sans nom',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 15,
+                                  color: _C.black,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Row(
+                                children: [
+                                  if (prixOriginal > 0)
+                                    Text(
+                                      '${prixOriginal.toStringAsFixed(0)} FCFA',
+                                      style: const TextStyle(
+                                        color: _C.sub,
+                                        fontSize: 12,
+                                        decoration: TextDecoration.lineThrough,
+                                      ),
+                                    ),
+                                  if (prixOriginal > 0) const SizedBox(width: 8),
+                                  Text(
+                                    '${prixPromo.toStringAsFixed(0)} FCFA',
+                                    style: const TextStyle(
                                       color: _C.green,
-                                      fontWeight: FontWeight.w700)),
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: _C.bg,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.access_time,
+                                        size: 14, color: _C.sub),
+                                    const SizedBox(width: 6),
+                                    if (p.dateDebut != null)
+                                      Text(
+                                        'Du ${DateFormat('dd/MM').format(p.dateDebut!)}',
+                                        style: const TextStyle(
+                                          fontSize: 11,
+                                          color: _C.sub,
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 8),
                               if (p.dateFin != null)
-                                Text(
-                                    'Jusqu\'au ${DateFormat('dd/MM/yyyy').format(p.dateFin!)}',
-                                    style:
-                                        const TextStyle(fontSize: 11, color: _C.sub)),
+                                Row(
+                                  children: [
+                                    const Icon(Icons.schedule,
+                                        size: 14, color: _C.sub),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      'Jusqu\'au ${DateFormat('dd/MM/yyyy').format(p.dateFin!)}',
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        color: _C.sub,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                             ],
                           ),
                         ),

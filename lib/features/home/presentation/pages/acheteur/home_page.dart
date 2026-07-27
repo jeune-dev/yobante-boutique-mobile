@@ -45,6 +45,7 @@ import '../../../../promotions/presentation/pages/section_promotions_page.dart';
 import '../../../data/datasources/banniere_remote_datasource.dart';
 import '../../../data/models/banniere_model.dart';
 import '../../../../promotions/data/models/bloc_promo_model.dart';
+import 'blocs_section_page.dart';
 import 'dart:async';
 
 
@@ -757,7 +758,12 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
     return GestureDetector(
       onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const PromotionsActivesPage()),
+        MaterialPageRoute(
+          builder: (_) => SectionPromotionsPage(
+            section: 'a_ne_pas_rater',
+            titre: _titresSections['a_ne_pas_rater'] ?? 'À ne pas manquer',
+          ),
+        ),
       ),
       child: Container(
         width: 268,
@@ -817,17 +823,20 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     );
   }
 
-  /// Carte de fin de carrousel menant à toutes les promotions de la section.
+  /// Carte de fin de carrousel menant à tous les blocs (sous-sections) de la section.
   ///
-  /// Elle renvoyait vers l'ensemble des promotions du catalogue, toutes
-  /// sections confondues : on reste désormais dans la section parcourue.
+  /// Au lieu d'afficher directement les promotions, on affiche d'abord les
+  /// blocs (sous-sections) de la section. Cliquer sur un bloc ouvre les
+  /// promotions de ce bloc.
   Widget _buildVoirTousCard(String section) {
+    final blocs = _blocsParSection[section] ?? const [];
     return GestureDetector(
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) => SectionPromotionsPage(
+          builder: (_) => BlocsSectionPage(
             section: section,
             titre: _titresSections[section] ?? 'Promotions',
+            blocs: blocs,
           ),
         ),
       ),

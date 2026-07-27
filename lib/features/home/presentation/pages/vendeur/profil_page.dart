@@ -17,6 +17,7 @@ import '../../../../promotions/presentation/pages/mes_promotions_page.dart';
 import '../../../../notifications/presentation/pages/notifications_page.dart';
 import '../../../../messagerie/presentation/pages/conversations_page.dart';
 import '../../../../vendeur/domain/usecases/get_vendeur_tableau_bord.dart';
+import '../../../../vendeur/presentation/widgets/statut_chip.dart';
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
 class _C {
@@ -133,15 +134,102 @@ class _ProfilPageState extends State<ProfilPage>
   String get _adresse  => _user?.adresse   ?? 'Non renseignée';
 
   void _onLogout() {
-    showDialog(
+    showModalBottomSheet(
       context: context,
-      builder: (_) => _LogoutDialog(
-        onConfirm: () {
-          context.read<AuthBloc>().add(LogoutRequested());
-          Navigator.of(context).pushNamedAndRemoveUntil(
-            AppRouter.loginRoute, (_) => false,
-          );
-        },
+      isDismissible: true,
+      enableDrag: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+      ),
+      builder: (_) => Container(
+        decoration: const BoxDecoration(
+          color: Color(0xFFFFFFFF),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+        ),
+        padding: const EdgeInsets.fromLTRB(20, 28, 20, 36),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFE5E5),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Icon(
+                Icons.logout_rounded,
+                color: VendeurCouleurs.rouge,
+                size: 32,
+              ),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'Se déconnecter ?',
+              style: GoogleFonts.sora(
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
+                color: const Color(0xFF1A1A1A),
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Vous devrez vous reconnecter pour accéder à votre compte.',
+              style: GoogleFonts.dmSans(
+                fontSize: 15,
+                fontWeight: FontWeight.w400,
+                color: const Color(0xFF6B7280),
+                height: 1.6,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 32),
+            Column(
+              children: [
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    context.read<AuthBloc>().add(LogoutRequested());
+                    Navigator.of(context).pushNamedAndRemoveUntil(
+                      AppRouter.loginRoute, (_) => false,
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: VendeurCouleurs.rouge,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  child: Text(
+                    'Se déconnecter',
+                    style: GoogleFonts.sora(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  child: Text(
+                    'Annuler',
+                    style: GoogleFonts.dmSans(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF6B7280),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -586,27 +674,101 @@ class _ProfilPageState extends State<ProfilPage>
 
   // ── Suppression de compte (irréversible) ───────────────────────────────────
   Future<void> _onSupprimerCompte() async {
-    final confirme = await showDialog<bool>(
+    final confirme = await showModalBottomSheet<bool>(
       context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Supprimer votre compte ?'),
-        content: const Text(
-          'Cette action est irréversible : votre profil, votre boutique et '
-          'vos données personnelles seront supprimés. Si vous avez des '
-          'commandes en cours, vous devrez d\'abord les finaliser.',
+      isDismissible: true,
+      enableDrag: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+      ),
+      builder: (_) => Container(
+        decoration: const BoxDecoration(
+          color: Color(0xFFFFFFFF),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Annuler'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: _C.red),
-            child: const Text('Supprimer définitivement'),
-          ),
-        ],
+        padding: const EdgeInsets.fromLTRB(20, 28, 20, 36),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFE5E5),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Icon(
+                Icons.delete_outline_rounded,
+                color: _C.red,
+                size: 32,
+              ),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'Supprimer votre compte ?',
+              style: GoogleFonts.sora(
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
+                color: _C.black,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Cette action est irréversible : votre profil, votre boutique et vos données personnelles seront supprimés. Si vous avez des commandes en cours, vous devrez d\'abord les finaliser.',
+              style: GoogleFonts.dmSans(
+                fontSize: 15,
+                fontWeight: FontWeight.w400,
+                color: _C.sub,
+                height: 1.6,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 32),
+            Column(
+              children: [
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _C.red,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        'Supprimer définitivement',
+                        style: GoogleFonts.sora(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  child: Text(
+                    'Annuler',
+                    style: GoogleFonts.dmSans(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: _C.sub,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
     if (confirme == true && mounted) {
@@ -755,100 +917,6 @@ class _ProfilPageState extends State<ProfilPage>
 // ══════════════════════════════════════════════════════════════════════════════
 // DIALOG DÉCONNEXION
 // ══════════════════════════════════════════════════════════════════════════════
-class _LogoutDialog extends StatelessWidget {
-  final VoidCallback onConfirm;
-  const _LogoutDialog({required this.onConfirm});
-
-  @override
-  Widget build(BuildContext context) {
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      backgroundColor: _C.white,
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 60, height: 60,
-              decoration: BoxDecoration(
-                color: _C.redLight,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.logout_rounded,
-                  color: _C.red, size: 28),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Se déconnecter ?',
-              style: GoogleFonts.sora(
-                fontSize: 17, fontWeight: FontWeight.w800, color: _C.black,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Vous devrez vous reconnecter\npour accéder à votre compte.',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.dmSans(
-                fontSize: 13, color: _C.sub, height: 1.6,
-              ),
-            ),
-            const SizedBox(height: 24),
-            Row(
-              children: [
-                Expanded(
-                  child: GestureDetector(
-                    onTap: () => Navigator.pop(context),
-                    child: Container(
-                      height: 48,
-                      decoration: BoxDecoration(
-                        color: _C.surface,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: const Color(0xFFDDE3EF)),
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        'Annuler',
-                        style: GoogleFonts.dmSans(
-                          fontSize: 14, fontWeight: FontWeight.w700,
-                          color: _C.sub,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: GestureDetector(
-                    onTap: () {
-                      Navigator.pop(context);
-                      onConfirm();
-                    },
-                    child: Container(
-                      height: 48,
-                      decoration: BoxDecoration(
-                        color: _C.red,
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        'Confirmer',
-                        style: GoogleFonts.sora(
-                          fontSize: 14, fontWeight: FontWeight.w700,
-                          color: _C.white,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
 
 // ══════════════════════════════════════════════════════════════════════════════
 // COMPOSANTS RÉUTILISABLES

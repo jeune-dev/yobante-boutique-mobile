@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -9,8 +10,36 @@ import '../bloc/commande_state.dart';
 import '../widgets/commande_card.dart';
 import 'commande_detail_page.dart';
 
-class MesCommandesPage extends StatelessWidget {
+class MesCommandesPage extends StatefulWidget {
   const MesCommandesPage({super.key});
+
+  @override
+  State<MesCommandesPage> createState() => _MesCommandesPageState();
+}
+
+class _MesCommandesPageState extends State<MesCommandesPage> {
+  Timer? _pollingTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _startPolling();
+  }
+
+  void _startPolling() {
+    // Recharger les commandes toutes les 30 secondes pour vérifier les mises à jour de statut
+    _pollingTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) {
+        context.read<CommandeBloc>().add(LoadMesCommandes());
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _pollingTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {

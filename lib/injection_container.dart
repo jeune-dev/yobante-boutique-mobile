@@ -67,6 +67,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'core/services/token_service.dart';
 import 'core/services/notification_service.dart';
 import 'core/services/push_service.dart';
+import 'core/services/error_handler_service.dart';
 import 'package:yobante/features/home/data/datasources/banniere_remote_datasource.dart';
 import 'core/services/socket_service.dart';
 
@@ -110,6 +111,7 @@ Future<void> init() async {
 
   // Services
   sl.registerLazySingleton(() => TokenService(secureStorage: sl()));
+  sl.registerLazySingleton(() => ErrorHandlerService());
   sl.registerLazySingleton(() => SocketService(tokenService: sl()));
 
   //================================================
@@ -198,6 +200,15 @@ Future<void> init() async {
             _log('📋 Data: ${e.response!.data}');
           }
 
+          final statusCode = e.response?.statusCode;
+
+          // ── Erreur 500 : Erreur serveur → redirection directe ──────────────
+          if (statusCode == 500) {
+            _log('⚠️ Erreur serveur 500 → Redirection vers connexion');
+            await sl<ErrorHandlerService>().handleError(e);
+            return handler.reject(e);
+          }
+
           // ── Refresh token silencieux sur 401 ──────────────────────────────
           final reqPath = e.requestOptions.path.split('?')[0];
           final isAuthPath = reqPath.endsWith('/auth/login') ||
@@ -205,7 +216,7 @@ Future<void> init() async {
               reqPath.endsWith('/auth/refresh');
           final dejaRetente = e.requestOptions.extra['__retried'] == true;
 
-          if (e.response?.statusCode == 401 && !isAuthPath && !dejaRetente) {
+          if (statusCode == 401 && !isAuthPath && !dejaRetente) {
             try {
               final refresh = await sl<TokenService>().getRefreshToken();
               if (refresh != null && refresh.isNotEmpty) {
@@ -225,11 +236,22 @@ Future<void> init() async {
                   return handler.resolve(clone);
                 }
               }
-              // Refresh impossible → on déconnecte proprement
-              await sl<TokenService>().clearToken();
+              // Refresh impossible → on redirige vers connexion
+              _log('⚠️ Refresh échoué → Redirection vers connexion');
+              await sl<ErrorHandlerService>().handleError(e);
+              return handler.reject(e);
             } catch (_) {
-              await sl<TokenService>().clearToken();
+              _log('⚠️ Exception refresh → Redirection vers connexion');
+              await sl<ErrorHandlerService>().handleError(e);
+              return handler.reject(e);
             }
+          }
+
+          // ── Erreur 401 sur endpoint auth → redirection ──────────────
+          if (statusCode == 401 && isAuthPath) {
+            _log('⚠️ Erreur auth 401 → Redirection vers connexion');
+            await sl<ErrorHandlerService>().handleError(e);
+            return handler.reject(e);
           }
 
           return handler.next(e);

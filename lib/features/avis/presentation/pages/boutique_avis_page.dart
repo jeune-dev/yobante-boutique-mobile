@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../injection_container.dart';
+import '../../../../core/widgets/app_message.dart';
 import '../bloc/avis_bloc.dart';
 import '../bloc/avis_event.dart';
 import '../bloc/avis_state.dart';
@@ -74,9 +75,7 @@ class _BoutiqueAvisViewState extends State<_BoutiqueAvisView> {
       body: BlocConsumer<AvisBloc, AvisState>(
         listener: (context, state) {
           if (state is AvisError) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(state.message), backgroundColor: Colors.red),
-            );
+            AppMessage.error(context, state.message);
           }
         },
         builder: (context, state) {

@@ -1,6 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'dart:async';
 
 import '../../../../../injection_container.dart';
 import '../../../data/datasources/produit_remote_datasource.dart';
@@ -48,19 +49,29 @@ class _RayonProduitsPageState extends State<RayonProduitsPage> {
 
   final _searchCtrl    = TextEditingController();
   final _scrollCtrl    = ScrollController();
+  Timer? _searchTimer;
 
   @override
   void initState() {
     super.initState();
     _load(reset: true);
     _scrollCtrl.addListener(_onScroll);
-    _searchCtrl.addListener(() => setState(() {}));
+    _searchCtrl.addListener(_onSearchChanged);
+  }
+
+  void _onSearchChanged() {
+    setState(() {});
+    _searchTimer?.cancel();
+    _searchTimer = Timer(const Duration(milliseconds: 400), () {
+      _load(reset: true);
+    });
   }
 
   @override
   void dispose() {
     _searchCtrl.dispose();
     _scrollCtrl.dispose();
+    _searchTimer?.cancel();
     super.dispose();
   }
 
@@ -173,7 +184,40 @@ class _RayonProduitsPageState extends State<RayonProduitsPage> {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.shopping_cart_outlined),
+            icon: ListenableBuilder(
+              listenable: sl<PanierService>(),
+              builder: (_, __) {
+                final n = sl<PanierService>().nombreArticles;
+                return Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    const Icon(Icons.shopping_cart_outlined),
+                    if (n > 0)
+                      Positioned(
+                        right: -8,
+                        top: -8,
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: const BoxDecoration(
+                            color: _C.green,
+                            shape: BoxShape.circle,
+                          ),
+                          constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+                          child: Text(
+                            '$n',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                );
+              },
+            ),
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const PanierPage()),
             ),
@@ -184,27 +228,33 @@ class _RayonProduitsPageState extends State<RayonProduitsPage> {
         children: [
           // ── Barre de recherche ────────────────────────────────────────
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
             child: Container(
-              height: 44,
+              height: 50,
               decoration: BoxDecoration(
                 color: _C.white,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: _C.border),
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.08),
+                    blurRadius: 12,
+                    offset: const Offset(0, 2),
+                  )
+                ],
               ),
               child: Row(
                 children: [
-                  const SizedBox(width: 12),
-                  const Icon(Icons.search_rounded, size: 18, color: _C.label),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 16),
+                  Icon(Icons.search_rounded, size: 20, color: _C.green.withOpacity(0.6)),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: TextField(
                       controller: _searchCtrl,
-                      style: GoogleFonts.dmSans(fontSize: 13, color: _C.black),
+                      style: GoogleFonts.dmSans(fontSize: 14, color: _C.black, fontWeight: FontWeight.w500),
                       decoration: InputDecoration(
                         hintText: 'Rechercher dans ${widget.rayon.nom}…',
                         hintStyle: GoogleFonts.dmSans(
-                            fontSize: 13, color: _C.label),
+                            fontSize: 14, color: _C.label, fontWeight: FontWeight.w400),
                         border: InputBorder.none,
                         isDense: true,
                         contentPadding: EdgeInsets.zero,
@@ -219,12 +269,14 @@ class _RayonProduitsPageState extends State<RayonProduitsPage> {
                         _searchCtrl.clear();
                         _load(reset: true);
                       },
-                      child: const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 10),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
                         child: Icon(Icons.close_rounded,
-                            size: 16, color: _C.label),
+                            size: 18, color: _C.green.withOpacity(0.5)),
                       ),
                     ),
+                  if (_searchCtrl.text.isEmpty)
+                    const SizedBox(width: 12),
                 ],
               ),
             ),

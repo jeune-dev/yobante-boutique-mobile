@@ -78,7 +78,8 @@ class NotificationService with WidgetsBindingObserver {
     _sondage?.cancel();
     // Le backend ne pousse pas encore (FCM non configuré) : on interroge
     // périodiquement tant que l'application est au premier plan.
-    _sondage = Timer.periodic(const Duration(seconds: 45), (_) => rafraichir());
+    // Polling toutes les 60 secondes pour réduire la charge serveur
+    _sondage = Timer.periodic(const Duration(seconds: 60), (_) => rafraichir());
   }
 
   void arreter() {

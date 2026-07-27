@@ -14,7 +14,6 @@ import '../../../../core/widgets/toastNotif.dart';
 import '../bloc/auth_bloc.dart';
 import '../bloc/auth_event.dart';
 import '../bloc/auth_state.dart';
-import 'verify_email_page.dart';
 
 // ─── Palette (identique LoginPage) ───────────────────────────────────────────
 class _C {
@@ -233,14 +232,11 @@ class _RegisterPageState extends State<RegisterPage>
           if (state is AuthSuccess) {
             FocusScope.of(context).unfocus();
             showToast(context, 'Inscription réussie',
-                'Vérifiez votre email pour activer votre compte.',
+                'Bienvenue sur Yobante Boutique !',
                 ToastificationType.success);
             context.read<AuthBloc>().add(ResetAuthState());
-            Navigator.of(context).pushAndRemoveUntil(
-              MaterialPageRoute(
-                builder: (_) =>
-                    VerifyEmailPage(email: _emailController.text.trim()),
-              ),
+            Navigator.of(context).pushNamedAndRemoveUntil(
+              AppRouter.acheteurRoute,
               (_) => false,
             );
           } else if (state is AuthFailure) {
