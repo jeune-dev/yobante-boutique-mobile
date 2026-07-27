@@ -1,8 +1,9 @@
 import 'dart:async';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:yobante/core/routes/app_router.dart';
 import 'package:yobante/core/theme/app_theme.dart';
 import 'package:yobante/core/utils/app_logger.dart';
-import 'package:yobante/features/auth/presentation/bloc/auth_bloc.dart'; // <-- IMPORT AJOUTÉ
+import 'package:yobante/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:yobante/features/auth/presentation/pages/splash_page.dart';
 import 'package:yobante/injection_container.dart' as di;
 import 'package:flutter/foundation.dart';
@@ -57,6 +58,9 @@ void main() async {
 
     // dotenv est chargé une seule fois, à l'intérieur de di.init().
     await di.init();
+
+    // Initialiser les locales pour intl (dates en français)
+    await initializeDateFormatting('fr_FR', null);
 
     // Push FCM : silencieux et sans effet tant que google-services.json est
     // absent. Doit précéder runApp pour capter une ouverture depuis une

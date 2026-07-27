@@ -10,23 +10,40 @@ class _C {
   static const white = Color(0xFFFFFFFF);
   static const sub = Color(0xFF6B7280);
   static const border = Color(0xFFDDE3EF);
+  static const bg = Color(0xFFF5F7FB);
 }
 
 Color couleurStatutCommande(String statut) {
   switch (statut) {
     case 'livree':
-      return _C.green;
+      return const Color(0xFF10B981);
     case 'annulee':
     case 'rejetee':
-      return Colors.red;
+      return const Color(0xFFEF4444);
     case 'en_livraison':
     case 'prete':
-      return const Color(0xFFFF9800);
+      return const Color(0xFFF59E0B);
     case 'validee':
       return const Color(0xFF3B82F6);
+    case 'en_preparation':
+      return const Color(0xFF8B5CF6);
     default:
       return _C.sub;
   }
+}
+
+String _labelStatut(String statut) {
+  const labels = {
+    'en_attente': '⏳ En attente',
+    'validee': '✓ Validée',
+    'en_preparation': '📦 Préparation',
+    'prete': '📦 Prête',
+    'en_livraison': '🚚 En livraison',
+    'livree': '✓ Livrée',
+    'annulee': '✗ Annulée',
+    'rejetee': '✗ Rejetée',
+  };
+  return labels[statut] ?? statut;
 }
 
 class CommandeCard extends StatelessWidget {
@@ -37,258 +54,185 @@ class CommandeCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final couleur = couleurStatutCommande(commande.statut);
-    final nbArticles =
-        commande.lignes.fold<int>(0, (s, l) => s + l.quantite);
-    final dateFormat = DateFormat('dd MMM yyyy', 'fr_FR');
+    final nbArticles = commande.lignes.fold<int>(0, (s, l) => s + l.quantite);
+    final dateFormat = DateFormat('dd MMM', 'fr_FR');
+    final premiereImage = commande.lignes.isNotEmpty
+        ? commande.lignes.first.imageProduit
+        : null;
 
-    return InkWell(
+    return GestureDetector(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
       child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
           color: _C.white,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: _C.border),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: _C.border, width: 1),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.04),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            )
+              color: Colors.black.withValues(alpha: 0.06),
+              blurRadius: 12,
+              offset: const Offset(0, 3),
+            ),
           ],
         ),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // En-tête avec référence et statut
-            Padding(
-              padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          commande.referenceCommande,
-                          style: GoogleFonts.sora(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w800,
-                            color: _C.black,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          commande.createdAt != null
-                              ? dateFormat.format(commande.createdAt!)
-                              : '—',
-                          style: GoogleFonts.dmSans(
-                            fontSize: 12,
-                            color: _C.sub,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: couleur.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      kStatutCommandeLabels[commande.statut] ??
-                          commande.statut,
-                      style: GoogleFonts.dmSans(
-                        color: couleur,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 11,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Divider(height: 1, color: _C.border),
-
-            // Articles avec images
-            if (commande.lignes.isNotEmpty) ...[
-              Padding(
-                padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+            // Image principale (premier produit)
+            if (premiereImage != null && premiereImage.isNotEmpty)
+              ClipRRect(
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(16),
+                  topRight: Radius.circular(16),
+                ),
+                child: Stack(
                   children: [
-                    Text(
-                      '$nbArticles article(s)',
-                      style: GoogleFonts.dmSans(
-                        fontSize: 12,
-                        color: _C.sub,
+                    CachedNetworkImage(
+                      imageUrl: premiereImage,
+                      height: 160,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                      placeholder: (_, __) => Container(
+                        height: 160,
+                        color: _C.bg,
+                        child: const Center(
+                          child: SizedBox(
+                            width: 30,
+                            height: 30,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        ),
+                      ),
+                      errorWidget: (_, __, ___) => Container(
+                        height: 160,
+                        color: _C.bg,
+                        child: Icon(Icons.image_not_supported,
+                            color: _C.sub, size: 32),
                       ),
                     ),
-                    const SizedBox(height: 10),
-                    SizedBox(
-                      height: 70,
-                      child: ListView.separated(
-                        scrollDirection: Axis.horizontal,
-                        itemCount: commande.lignes.length,
-                        separatorBuilder: (_, __) =>
-                            const SizedBox(width: 8),
-                        itemBuilder: (context, i) {
-                          final ligne = commande.lignes[i];
-                          final images = ligne.imageProduit != null
-                              ? [ligne.imageProduit!]
-                              : [];
-                          return Stack(
-                            children: [
-                              Container(
-                                width: 70,
-                                height: 70,
-                                decoration: BoxDecoration(
-                                  borderRadius:
-                                      BorderRadius.circular(10),
-                                  color: _C.border,
-                                  border:
-                                      Border.all(color: _C.border),
-                                ),
-                                child: images.isNotEmpty
-                                    ? ClipRRect(
-                                        borderRadius:
-                                            BorderRadius
-                                                .circular(10),
-                                        child: CachedNetworkImage(
-                                          imageUrl: images[0],
-                                          fit: BoxFit.cover,
-                                          placeholder: (_, __) =>
-                                              const Center(
-                                            child:
-                                                SizedBox(
-                                              width: 20,
-                                              height:
-                                                  20,
-                                              child:
-                                                  CircularProgressIndicator(
-                                                strokeWidth:
-                                                    2,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      )
-                                    : Center(
-                                        child: Icon(
-                                          Icons
-                                              .image_not_supported,
-                                          color:
-                                              _C.sub,
-                                          size: 24,
-                                        ),
-                                      ),
-                              ),
-                              if (ligne.quantite > 1)
-                                Positioned(
-                                  bottom: 2,
-                                  right: 2,
-                                  child: Container(
-                                    padding:
-                                        const EdgeInsets
-                                            .symmetric(
-                                          horizontal: 4,
-                                          vertical: 2,
-                                        ),
-                                    decoration:
-                                        BoxDecoration(
-                                      color: _C.green,
-                                      borderRadius:
-                                          BorderRadius
-                                              .circular(8),
-                                    ),
-                                    child: Text(
-                                      'x${ligne.quantite}',
-                                      style: GoogleFonts
-                                          .dmSans(
-                                        fontSize: 10,
-                                        color: _C.white,
-                                        fontWeight:
-                                            FontWeight
-                                                .w700,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          );
-                        },
+                    // Badge statut en haut à droite
+                    Positioned(
+                      top: 12,
+                      right: 12,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: couleur,
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: [
+                            BoxShadow(
+                              color: couleur.withValues(alpha: 0.4),
+                              blurRadius: 6,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Text(
+                          _labelStatut(commande.statut),
+                          style: GoogleFonts.sora(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: _C.white,
+                          ),
+                        ),
                       ),
                     ),
+                    // Badge nombre d'articles en bas à gauche
+                    if (nbArticles > 1)
+                      Positioned(
+                        bottom: 10,
+                        left: 10,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: _C.black.withValues(alpha: 0.7),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            '+${nbArticles - 1}',
+                            style: GoogleFonts.sora(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: _C.white,
+                            ),
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),
-              Divider(height: 1, color: _C.border),
-            ],
-
-            // Récapitulatif montants et paiement
+            // Contenu principal
             Padding(
-              padding: const EdgeInsets.all(14),
+              padding: const EdgeInsets.all(16),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Référence et date
                   Row(
-                    mainAxisAlignment:
-                        MainAxisAlignment.spaceBetween,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        'Sous-total',
-                        style: GoogleFonts.dmSans(
-                          fontSize: 12,
-                          color: _C.sub,
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              commande.referenceCommande,
+                              style: GoogleFonts.sora(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w800,
+                                color: _C.black,
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              commande.createdAt != null
+                                  ? dateFormat.format(commande.createdAt!)
+                                  : '—',
+                              style: GoogleFonts.dmSans(
+                                fontSize: 12,
+                                color: _C.sub,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      Text(
-                        '${(commande.montantTotal - commande.fraisLivraison).toStringAsFixed(0)} FCFA',
-                        style: GoogleFonts.dmSans(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: _C.black,
+                      // Articles count
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _C.bg,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          '$nbArticles article${nbArticles > 1 ? 's' : ''}',
+                          style: GoogleFonts.dmSans(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: _C.sub,
+                          ),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 12),
+                  // Prix total
                   Row(
-                    mainAxisAlignment:
-                        MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Livraison',
-                        style: GoogleFonts.dmSans(
-                          fontSize: 12,
-                          color: _C.sub,
-                        ),
-                      ),
-                      Text(
-                        '${commande.fraisLivraison.toStringAsFixed(0)} FCFA',
-                        style: GoogleFonts.dmSans(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: _C.black,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Divider(height: 1, color: _C.border),
-                  const SizedBox(height: 10),
-                  Row(
-                    mainAxisAlignment:
-                        MainAxisAlignment.spaceBetween,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
                         'Total',
-                        style: GoogleFonts.sora(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w800,
-                          color: _C.black,
+                        style: GoogleFonts.dmSans(
+                          fontSize: 12,
+                          color: _C.sub,
                         ),
                       ),
                       Text(
@@ -296,15 +240,15 @@ class CommandeCard extends StatelessWidget {
                         style: GoogleFonts.sora(
                           fontSize: 14,
                           fontWeight: FontWeight.w800,
-                          color: _C.green,
+                          color: _green,
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 8),
+                  // Statut paiement
                   Row(
-                    mainAxisAlignment:
-                        MainAxisAlignment.spaceBetween,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
                         'Paiement',
@@ -319,65 +263,52 @@ class CommandeCard extends StatelessWidget {
                           vertical: 4,
                         ),
                         decoration: BoxDecoration(
-                          color: commande.statutPaiement ==
-                                  'paye'
-                              ? const Color(0xFF10B981)
-                                  .withValues(alpha: 0.1)
-                              : const Color(0xFFFB923C)
-                                  .withValues(alpha: 0.1),
-                          borderRadius:
-                              BorderRadius.circular(6),
+                          color: commande.statutPaiement == 'paye'
+                              ? const Color(0xFFD1FAE5)
+                              : const Color(0xFFFEF3C7),
+                          borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
-                          commande.statutPaiement ==
-                                  'paye'
+                          commande.statutPaiement == 'paye'
                               ? 'Payé'
-                              : commande.statutPaiement ==
-                                      'rembourse'
-                                  ? 'Remboursé'
-                                  : 'En attente',
+                              : 'En attente',
                           style: GoogleFonts.dmSans(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
-                            color: commande
-                                        .statutPaiement ==
-                                    'paye'
-                                ? const Color(0xFF10B981)
-                                : const Color(0xFFFB923C),
+                            color: commande.statutPaiement == 'paye'
+                                ? const Color(0xFF059669)
+                                : const Color(0xFFB45309),
                           ),
                         ),
                       ),
                     ],
                   ),
-                  if (commande.statut == 'rejetee' && commande.motifRejet != null) ...[
+                  // Motif de rejet si applicable
+                  if (commande.statut == 'rejetee' &&
+                      commande.motifRejet != null) ...[
                     const SizedBox(height: 12),
                     Container(
+                      padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
                         color: const Color(0xFFFEE2E2),
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: const Color(0xFFFECACA),
-                        ),
+                        border:
+                            Border.all(color: const Color(0xFFFECACA)),
                       ),
-                      padding: const EdgeInsets.all(12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      child: Row(
                         children: [
-                          Text(
-                            '⚠️ Motif du rejet',
-                            style: GoogleFonts.sora(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: const Color(0xFFDC2626),
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            commande.motifRejet!,
-                            style: GoogleFonts.dmSans(
-                              fontSize: 12,
-                              color: const Color(0xFF7F1D1D),
-                              height: 1.4,
+                          const Icon(Icons.info_outline,
+                              color: Color(0xFFDC2626), size: 16),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              commande.motifRejet!,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.dmSans(
+                                fontSize: 11,
+                                color: const Color(0xFF7F1D1D),
+                              ),
                             ),
                           ),
                         ],
@@ -393,3 +324,17 @@ class CommandeCard extends StatelessWidget {
     );
   }
 }
+
+const _green = Color(0xFF163A9E);
+
+const Map<String, String> kStatutCommandeLabels = {
+  'en_attente': 'En attente',
+  'confirmee': 'Confirmée',
+  'en_preparation': 'En préparation',
+  'prete': 'Prête',
+  'en_livraison': 'En livraison',
+  'livree': 'Livrée',
+  'annulee': 'Annulée',
+  'rejetee': 'Rejetée',
+  'validee': 'Validée',
+};

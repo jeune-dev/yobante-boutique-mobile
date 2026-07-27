@@ -19,18 +19,18 @@ class MesCommandesPage extends StatefulWidget {
 
 class _MesCommandesPageState extends State<MesCommandesPage> {
   Timer? _pollingTimer;
+  late CommandeBloc _bloc;
 
   @override
   void initState() {
     super.initState();
-    _startPolling();
   }
 
   void _startPolling() {
     // Recharger les commandes toutes les 30 secondes pour vérifier les mises à jour de statut
     _pollingTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (mounted) {
-        context.read<CommandeBloc>().add(LoadMesCommandes());
+      if (mounted && _bloc.isClosed == false) {
+        _bloc.add(LoadMesCommandes());
       }
     });
   }
@@ -44,7 +44,11 @@ class _MesCommandesPageState extends State<MesCommandesPage> {
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (_) => sl<CommandeBloc>()..add(LoadMesCommandes()),
+      create: (_) {
+        _bloc = sl<CommandeBloc>()..add(LoadMesCommandes());
+        _startPolling();
+        return _bloc;
+      },
       child: Scaffold(
         backgroundColor: const Color(0xFFF5F7FB),
         appBar: AppBar(
