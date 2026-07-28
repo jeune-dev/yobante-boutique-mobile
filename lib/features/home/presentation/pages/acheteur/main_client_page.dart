@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:yobante/features/auth/domain/entities/user.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../../injection_container.dart';
-import '../../../../../core/routes/app_router.dart';
 import '../../../../../core/services/token_service.dart';
 import 'home_page.dart';
 import 'recherche_page.dart';
 import '../../../../promotions/presentation/pages/promotions_actives_page.dart';
+import '../../../../commande/data/services/panier_service.dart';
 import '../../../../commande/presentation/pages/panier_page.dart';
 import '../../../../commande/presentation/pages/commande_page.dart';
 
@@ -14,26 +14,39 @@ import '../../../../commande/presentation/pages/commande_page.dart';
 class _C {
   static const green      = Color(0xFF163A9E);
   static const greenLight = Color(0xFFEAEEF9);
-  static const black      = Color(0xFF1A1A1A);
   static const white      = Color(0xFFFFFFFF);
   static const bg         = Color(0xFFF5F7FB);
   static const border     = Color(0xFFEDF0F7);
-  static const label      = Color(0xFF9AA3B2);
   static const inactive   = Color(0xFFC2C9D6);
+  static const or         = Color(0xFFF5C518);
 }
+
+/// Destinations de la barre du bas, désignées par leur rôle et non par leur
+/// index : la barre n'a pas la même composition pour un visiteur et pour un
+/// client connecté, un index nu ne désignerait donc pas le même écran.
+enum OngletClient { accueil, recherche, promotions, panier, commande }
+
+/// Onglet réclamé depuis une page ouverte par-dessus la boutique — le menu de
+/// la [BarreBoutique], par exemple, qui ramène à l'accueil ou aux catégories.
+///
+/// La page racine l'écoute et s'y positionne, puis remet la valeur à nul : la
+/// demande est consommée une seule fois.
+final ValueNotifier<OngletClient?> ongletClientDemande =
+    ValueNotifier<OngletClient?>(null);
 
 // ─── Modèle d'un item de navigation ──────────────────────────────────────────
 class _NavItem {
   final IconData icon;
   final IconData activeIcon;
   final String label;
-  final bool hasNotif;
+  /// Écran visé par cet item.
+  final OngletClient? onglet;
 
   const _NavItem({
     required this.icon,
     required this.activeIcon,
     required this.label,
-    this.hasNotif = false,
+    this.onglet,
   });
 }
 
@@ -55,41 +68,66 @@ class _MainAcheteurPageState extends State<MainAcheteurPage>
   late List<Animation<double>>   _labelFade;
 
   // Navigation du visiteur : pas d'onglet Commande — sans compte il n'y a pas
-  // d'historique à afficher. Le dernier item mène à la connexion au lieu de
-  // changer d'onglet.
+  // d'historique à afficher. Pas d'onglet Connexion non plus : se connecter est
+  // proposé là où c'est utile — l'en-tête de l'accueil, le panier au moment de
+  // valider — et non comme une destination permanente.
   static const List<_NavItem> _navVisiteur = [
-    _NavItem(icon: Icons.home_outlined, activeIcon: Icons.home_rounded, label: 'Accueil'),
-    _NavItem(icon: Icons.search_rounded, activeIcon: Icons.search_rounded, label: 'Rechercher'),
+    _NavItem(
+      icon: Icons.home_outlined,
+      activeIcon: Icons.home_rounded,
+      label: 'Accueil',
+      onglet: OngletClient.accueil,
+    ),
+    _NavItem(
+      icon: Icons.search_rounded,
+      activeIcon: Icons.search_rounded,
+      label: 'Rechercher',
+      onglet: OngletClient.recherche,
+    ),
     _NavItem(
       icon: Icons.local_offer_outlined,
       activeIcon: Icons.local_offer_rounded,
       label: 'Promotion',
+      onglet: OngletClient.promotions,
     ),
     _NavItem(
       icon: Icons.shopping_cart_outlined,
       activeIcon: Icons.shopping_cart_rounded,
       label: 'Panier',
+      onglet: OngletClient.panier,
     ),
-    _NavItem(icon: Icons.login_rounded, activeIcon: Icons.login_rounded, label: 'Connexion'),
   ];
 
   static const List<_NavItem> _navConnecte = [
-    _NavItem(icon: Icons.home_outlined, activeIcon: Icons.home_rounded, label: 'Accueil'),
-    _NavItem(icon: Icons.search_rounded, activeIcon: Icons.search_rounded, label: 'Rechercher'),
+    _NavItem(
+      icon: Icons.home_outlined,
+      activeIcon: Icons.home_rounded,
+      label: 'Accueil',
+      onglet: OngletClient.accueil,
+    ),
+    _NavItem(
+      icon: Icons.search_rounded,
+      activeIcon: Icons.search_rounded,
+      label: 'Rechercher',
+      onglet: OngletClient.recherche,
+    ),
     _NavItem(
       icon: Icons.receipt_long_outlined,
       activeIcon: Icons.receipt_long_rounded,
       label: 'Commande',
+      onglet: OngletClient.commande,
     ),
     _NavItem(
       icon: Icons.local_offer_outlined,
       activeIcon: Icons.local_offer_rounded,
       label: 'Promotion',
+      onglet: OngletClient.promotions,
     ),
     _NavItem(
       icon: Icons.shopping_cart_outlined,
       activeIcon: Icons.shopping_cart_rounded,
       label: 'Panier',
+      onglet: OngletClient.panier,
     ),
   ];
 
@@ -98,10 +136,6 @@ class _MainAcheteurPageState extends State<MainAcheteurPage>
   bool _estConnecte = false;
 
   List<_NavItem> get _navItems => _estConnecte ? _navConnecte : _navVisiteur;
-
-  /// Index de l'item « Connexion » chez le visiteur : il déclenche une
-  /// navigation au lieu d'afficher une page.
-  int get _indexConnexion => _navVisiteur.length - 1;
 
   late List<Widget> _pages;
 
@@ -119,8 +153,6 @@ class _MainAcheteurPageState extends State<MainAcheteurPage>
             const RechercheGlobalePage(),
             const PromotionsActivesPage(),
             const PanierPage(),
-            // Jamais affichée : l'item « Connexion » navigue.
-            const SizedBox.shrink(),
           ];
   }
 
@@ -142,14 +174,18 @@ class _MainAcheteurPageState extends State<MainAcheteurPage>
   void initState() {
     super.initState();
 
-    // L'utilisateur transmis par le login suffit à trancher immédiatement ;
-    // sinon on interroge le token, ce qui couvre la restauration de session.
-    _estConnecte = widget.user != null;
+    // Tranché dès la construction : l'utilisateur transmis par le login, sinon
+    // l'état de session déjà en cache. Interroger le stockage sécurisé ici
+    // aurait affiché la barre visiteur le temps de la lecture, même pour un
+    // client connecté. La vérification asynchrone reste, en filet.
+    _estConnecte = widget.user != null || sl<TokenService>().estConnecte;
     _construirePages();
     _verifierSession();
 
     _itemCtrl = List.generate(
-      _navItems.length,
+      _navVisiteur.length > _navConnecte.length
+          ? _navVisiteur.length
+          : _navConnecte.length,
           (_) => AnimationController(
         vsync: this,
         duration: const Duration(milliseconds: 280),
@@ -168,10 +204,24 @@ class _MainAcheteurPageState extends State<MainAcheteurPage>
 
     // Activer le premier tab au démarrage
     _itemCtrl[0].forward();
+
+    ongletClientDemande.addListener(_surOngletDemande);
+  }
+
+  /// Se positionne sur l'onglet réclamé par une page ouverte au-dessus.
+  void _surOngletDemande() {
+    final onglet = ongletClientDemande.value;
+    if (onglet == null || !mounted) return;
+    ongletClientDemande.value = null; // demande consommée
+    final index = _navItems.indexWhere((item) => item.onglet == onglet);
+    // Un onglet absent de la barre courante (« Commande » chez le visiteur)
+    // est ignoré plutôt que de renvoyer sur un écran arbitraire.
+    if (index >= 0) _onTap(index);
   }
 
   @override
   void dispose() {
+    ongletClientDemande.removeListener(_surOngletDemande);
     for (final ctrl in _itemCtrl) {
       ctrl.dispose();
     }
@@ -179,14 +229,6 @@ class _MainAcheteurPageState extends State<MainAcheteurPage>
   }
 
   Future<void> _onTap(int index) async {
-    // Chez le visiteur, « Connexion » ouvre l'écran de login. Au retour, la
-    // session est réévaluée : si la connexion a réussi, la barre bascule sur
-    // la navigation du client connecté.
-    if (!_estConnecte && index == _indexConnexion) {
-      await Navigator.of(context).pushNamed(AppRouter.loginRoute);
-      await _verifierSession();
-      return;
-    }
     if (_selectedIndex == index) return;
     _itemCtrl[_selectedIndex].reverse();
     _itemCtrl[index].forward();
@@ -255,6 +297,36 @@ class _MainAcheteurPageState extends State<MainAcheteurPage>
     );
   }
 
+  /// Pastille du nombre d'articles, posée sur l'icône du panier.
+  Widget _compteurPanier() {
+    return Positioned(
+      top: -6,
+      right: -8,
+      child: ListenableBuilder(
+        listenable: sl<PanierService>(),
+        builder: (_, __) {
+          final nombre = sl<PanierService>().nombreArticles;
+          if (nombre == 0) return const SizedBox.shrink();
+          return Container(
+            padding: const EdgeInsets.all(3),
+            constraints: const BoxConstraints(minWidth: 17, minHeight: 17),
+            decoration: const BoxDecoration(
+                color: _C.green, shape: BoxShape.circle),
+            child: Text(
+              '$nombre',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.dmSans(
+                fontSize: 10,
+                fontWeight: FontWeight.w800,
+                color: _C.or,
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   Widget _buildNavItem(int index) {
     final item     = _navItems[index];
     final selected = _selectedIndex == index;
@@ -276,7 +348,6 @@ class _MainAcheteurPageState extends State<MainAcheteurPage>
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Icône avec badge notif si besoin
             Stack(
               clipBehavior: Clip.none,
               children: [
@@ -288,21 +359,10 @@ class _MainAcheteurPageState extends State<MainAcheteurPage>
                     color: selected ? _C.green : _C.inactive,
                   ),
                 ),
-                // Badge notification orange
-                if (item.hasNotif && !selected)
-                  Positioned(
-                    top: -2,
-                    right: -3,
-                    child: Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFF5722),
-                        shape: BoxShape.circle,
-                        border: Border.all(color: _C.white, width: 1.5),
-                      ),
-                    ),
-                  ),
+                // Nombre d'articles du panier, comme sur la barre supérieure :
+                // le client doit retrouver son panier rempli en revenant sur
+                // l'accueil, sans avoir à ouvrir l'onglet pour s'en assurer.
+                if (item.onglet == OngletClient.panier) _compteurPanier(),
               ],
             ),
             // Label animé (visible uniquement si sélectionné)

@@ -10,9 +10,23 @@ class TokenService {
 
   Stream<bool> get authChanges => _authController.stream;
 
+  /// Dernier état connu de la session, lisible **sans attendre**.
+  ///
+  /// Le jeton vit dans le stockage sécurisé, dont la lecture est asynchrone :
+  /// un écran qui l'interroge à sa construction s'affiche donc d'abord en
+  /// visiteur, puis bascule. Ce cache permet de peindre la bonne interface dès
+  /// la première image. Amorcé par [initialiser] au démarrage, puis tenu à jour
+  /// par [setToken] et [clearToken].
+  bool _connecte = false;
+  bool get estConnecte => _connecte;
+
+  /// Amorce le cache. À appeler une fois, avant le premier écran.
+  Future<bool> initialiser() async => isAuthenticated;
+
   Future<bool> get isAuthenticated async {
     final token = await getToken();
-    return token != null && token.isNotEmpty;
+    _connecte = token != null && token.isNotEmpty;
+    return _connecte;
   }
 
   Future<String?> getToken() async {
@@ -45,6 +59,7 @@ class TokenService {
   Future<void> clearToken() async {
     await secureStorage.delete(key: 'jwt_token');
     await secureStorage.delete(key: 'refresh_token');
+    _connecte = false;
     _authController.add(false);
   }
 

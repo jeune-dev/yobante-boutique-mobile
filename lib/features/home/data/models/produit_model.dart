@@ -37,6 +37,15 @@ class ProduitModel {
   final String messageVendeur;   // mot du vendeur au relecteur de la demande
   final String motifRejet;       // raison du refus, restituée dans le suivi
 
+  // ── Rattachement au catalogue ──────────────────────────────────────────────
+  // Le rayon et le sous-rayon situent le produit dans la boutique. Ils servent
+  // à proposer des articles similaires : deux produits du même sous-rayon se
+  // ressemblent bien plus que deux produits de la même catégorie.
+  final String rayonId;
+  final String sousRayonId;
+  final String rayonNom;      // renseigné quand le backend joint le rayon
+  final String sousRayonNom;
+
   ProduitModel({
     required this.id,
     required this.nom,
@@ -58,6 +67,10 @@ class ProduitModel {
     this.statutValidation = 'valide',
     this.messageVendeur = '',
     this.motifRejet = '',
+    this.rayonId = '',
+    this.sousRayonId = '',
+    this.rayonNom = '',
+    this.sousRayonNom = '',
   });
 
   factory ProduitModel.fromJson(Map<String, dynamic> json) {
@@ -95,6 +108,12 @@ class ProduitModel {
     // ── Catégorie ────────────────────────────────────────────────────
     final categorieMap = json['categorie'] as Map<String, dynamic>?;
     final categorie = categorieMap?['nom'] ?? '';
+
+    // ── Rayon / sous-rayon ───────────────────────────────────────────
+    // Les identifiants sont des colonnes du produit, donc toujours là ; les
+    // noms ne viennent que des endpoints qui joignent les associations.
+    final rayonMap     = json['rayon'] as Map<String, dynamic>?;
+    final sousRayonMap = json['sousRayon'] as Map<String, dynamic>?;
 
     // ── Images (galerie) — le backend renvoie soit des objets, soit des URLs ──
     List<ProduitImage>? images;
@@ -147,6 +166,10 @@ class ProduitModel {
       statutValidation: statutValidation,
       messageVendeur: json['messageVendeur']?.toString() ?? '',
       motifRejet: json['motifRejet']?.toString() ?? '',
+      rayonId:      (json['rayonId'] ?? rayonMap?['id'] ?? '').toString(),
+      sousRayonId:  (json['sousRayonId'] ?? sousRayonMap?['id'] ?? '').toString(),
+      rayonNom:     (rayonMap?['nom'] ?? '').toString(),
+      sousRayonNom: (sousRayonMap?['nom'] ?? '').toString(),
     );
   }
 

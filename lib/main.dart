@@ -8,10 +8,12 @@ import 'package:yobante/features/auth/presentation/pages/splash_page.dart';
 import 'package:yobante/injection_container.dart' as di;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:yobante/core/connection/auth_interceptor.dart';
 import 'package:yobante/core/services/push_service.dart';
 import 'package:yobante/core/services/error_handler_service.dart';
+import 'package:yobante/core/services/token_service.dart';
 
 
 
@@ -59,6 +61,10 @@ void main() async {
     // dotenv est chargé une seule fois, à l'intérieur de di.init().
     await di.init();
 
+    // État de session connu avant le premier écran : sans cela, l'accueil se
+    // peint en visiteur puis bascule en connecté une fois le jeton lu.
+    await di.sl<TokenService>().initialiser();
+
     // Initialiser les locales pour intl (dates en français)
     await initializeDateFormatting('fr_FR', null);
 
@@ -102,6 +108,15 @@ class _MyAppState extends State<MyApp> {
         debugShowCheckedModeBanner: false,
         title: 'Yobante Boutique',
         theme: AppTheme.light(),
+        // Sans ces délégués, tout composant Material localisé — le sélecteur de
+        // date de la validation de commande, par exemple — lève à l'ouverture.
+        locale: const Locale('fr', 'FR'),
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: const [Locale('fr', 'FR'), Locale('en', 'US')],
         home: const SplashPage(),
         onGenerateRoute: AppRouter.onGenerateRoute,
       ),

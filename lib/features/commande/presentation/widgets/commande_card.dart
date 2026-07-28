@@ -5,7 +5,6 @@ import 'package:intl/intl.dart';
 import '../../data/models/commande_model.dart';
 
 class _C {
-  static const green = Color(0xFF163A9E);
   static const black = Color(0xFF1A1A1A);
   static const white = Color(0xFFFFFFFF);
   static const sub = Color(0xFF6B7280);
@@ -20,8 +19,7 @@ Color couleurStatutCommande(String statut) {
     case 'annulee':
     case 'rejetee':
       return const Color(0xFFEF4444);
-    case 'en_livraison':
-    case 'prete':
+    case 'expediee':
       return const Color(0xFFF59E0B);
     case 'validee':
       return const Color(0xFF3B82F6);
@@ -37,8 +35,7 @@ String _labelStatut(String statut) {
     'en_attente': '⏳ En attente',
     'validee': '✓ Validée',
     'en_preparation': '📦 Préparation',
-    'prete': '📦 Prête',
-    'en_livraison': '🚚 En livraison',
+    'expediee': '🚚 Expédiée',
     'livree': '✓ Livrée',
     'annulee': '✗ Annulée',
     'rejetee': '✗ Rejetée',
@@ -54,7 +51,7 @@ class CommandeCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final couleur = couleurStatutCommande(commande.statut);
-    final nbArticles = commande.lignes.fold<int>(0, (s, l) => s + l.quantite);
+    final nbArticles = commande.nombreArticles;
     final dateFormat = DateFormat('dd MMM', 'fr_FR');
     final premiereImage = commande.lignes.isNotEmpty
         ? commande.lignes.first.imageProduit
@@ -182,7 +179,7 @@ class CommandeCard extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              commande.referenceCommande,
+                              commande.reference,
                               style: GoogleFonts.sora(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w800,
@@ -246,36 +243,30 @@ class CommandeCard extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  // Statut paiement
+                  // Règlement : le libellé vient du paiement joint à la
+                  // commande, seule source qui sache s'il reste à payer.
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
                         'Paiement',
-                        style: GoogleFonts.dmSans(
-                          fontSize: 12,
-                          color: _C.sub,
-                        ),
+                        style: GoogleFonts.dmSans(fontSize: 12, color: _C.sub),
                       ),
                       Container(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
+                            horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
-                          color: commande.statutPaiement == 'paye'
+                          color: commande.estPaye
                               ? const Color(0xFFD1FAE5)
                               : const Color(0xFFFEF3C7),
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
-                          commande.statutPaiement == 'paye'
-                              ? 'Payé'
-                              : 'En attente',
+                          commande.paiement?.statutLibelle ?? 'En attente',
                           style: GoogleFonts.dmSans(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
-                            color: commande.statutPaiement == 'paye'
+                            color: commande.estPaye
                                 ? const Color(0xFF059669)
                                 : const Color(0xFFB45309),
                           ),
@@ -283,6 +274,27 @@ class CommandeCard extends StatelessWidget {
                       ),
                     ],
                   ),
+                  // Date souhaitée : c'est l'information que le client attend
+                  // en priorité une fois sa commande passée.
+                  if (commande.dateLivraisonSouhaitee != null) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('Livraison souhaitée',
+                            style: GoogleFonts.dmSans(
+                                fontSize: 12, color: _C.sub)),
+                        Text(
+                          DateFormat('d MMM yyyy', 'fr_FR')
+                              .format(commande.dateLivraisonSouhaitee!),
+                          style: GoogleFonts.dmSans(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: _C.black),
+                        ),
+                      ],
+                    ),
+                  ],
                   // Motif de rejet si applicable
                   if (commande.statut == 'rejetee' &&
                       commande.motifRejet != null) ...[
@@ -327,14 +339,3 @@ class CommandeCard extends StatelessWidget {
 
 const _green = Color(0xFF163A9E);
 
-const Map<String, String> kStatutCommandeLabels = {
-  'en_attente': 'En attente',
-  'confirmee': 'Confirmée',
-  'en_preparation': 'En préparation',
-  'prete': 'Prête',
-  'en_livraison': 'En livraison',
-  'livree': 'Livrée',
-  'annulee': 'Annulée',
-  'rejetee': 'Rejetée',
-  'validee': 'Validée',
-};

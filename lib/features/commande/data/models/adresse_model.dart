@@ -35,5 +35,17 @@ class AdresseModel {
       );
 
   /// Résumé sur une ligne, pour la sélection au moment de commander.
-  String get resume => [rue, ville, if (region != null && region!.isNotEmpty) region].join(', ');
+  String get resume => [
+        rue,
+        ville,
+        if (region != null && region!.isNotEmpty) region,
+      ].join(', ');
+
+  /// Adresse complète, pays compris — affichée sur la fiche de commande.
+  String get adresseComplete => [
+        rue,
+        ville,
+        if (region != null && region!.isNotEmpty) region,
+        if (pays.isNotEmpty) pays,
+      ].where((e) => (e ?? '').isNotEmpty).join(', ');
 }

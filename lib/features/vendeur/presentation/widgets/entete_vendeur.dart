@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../../injection_container.dart';
 import '../../../../core/services/token_service.dart';
 import '../../../../core/widgets/cloche_notifications.dart';
+import '../../../../core/utils/image_asset.dart';
 import '../../../auth/domain/entities/user.dart';
 import '../../../compte/presentation/bloc/compte_bloc.dart';
 import '../../../compte/presentation/bloc/compte_event.dart';
@@ -88,9 +89,10 @@ class _EnteteVendeurState extends State<EnteteVendeur> {
           padding: const EdgeInsets.fromLTRB(16, 10, 12, 12),
           child: Row(
             children: [
-              Image.asset(
+              imageAsset(
+                context,
                 'assets/images/Logo Yobante pictogramme - Version.png',
-                height: 76,
+                hauteur: 76,
                 fit: BoxFit.contain,
               ),
               const Spacer(),
@@ -120,6 +122,9 @@ class _EnteteVendeurState extends State<EnteteVendeur> {
                             width: 40,
                             height: 40,
                             fit: BoxFit.cover,
+                            cacheWidth: (40 *
+                                    MediaQuery.of(context).devicePixelRatio)
+                                .round(),
                             errorBuilder: (_, __, ___) => _pastilleInitiales(),
                           ),
                         )

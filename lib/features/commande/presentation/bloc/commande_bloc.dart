@@ -15,6 +15,7 @@ class CommandeBloc extends Bloc<CommandeEvent, CommandeState> {
     on<CreerCommande>(_onCreerCommande);
     on<PayerCommande>(_onPayerCommande);
     on<VerifierPaiement>(_onVerifierPaiement);
+    on<RechargerCommande>(_onRechargerCommande);
     on<AnnulerCommande>(_onAnnulerCommande);
   }
 
@@ -45,16 +46,17 @@ class CommandeBloc extends Bloc<CommandeEvent, CommandeState> {
     try {
       final panier = sl<PanierService>();
 
-      // Si vendeurId est spécifié, prendre seulement ses articles ; sinon tous
-      final List<PanierItem> items;
-      if (event.vendeurId != null) {
-        items = panier.parVendeur[event.vendeurId!] ?? [];
-      } else {
-        // Tous les articles de tous les vendeurs
-        items = panier.parVendeur.values.expand((e) => e).toList();
+      // Seuls les articles cochés partent en commande ; le reste attend dans
+      // le panier.
+      final List<PanierItem> items = event.produitIds == null
+          ? panier.items
+          : panier.selection(event.produitIds!);
+
+      if (items.isEmpty) {
+        emit(CommandeError('Sélectionnez au moins un article à commander'));
+        return;
       }
 
-      // Convertir les items en format attendu par le backend
       final itemsData = items
           .map((item) => {'produitId': item.produitId, 'quantite': item.quantite})
           .toList();
@@ -64,6 +66,7 @@ class CommandeBloc extends Bloc<CommandeEvent, CommandeState> {
         methode: event.methode,
         items: itemsData,
         note: event.note,
+        dateLivraisonSouhaitee: event.dateLivraisonSouhaitee,
       );
       emit(CommandeCreee(commande));
     } catch (e) {
@@ -89,6 +92,18 @@ class CommandeBloc extends Bloc<CommandeEvent, CommandeState> {
       emit(PaiementStatut(paiement));
     } catch (e) {
       emit(CommandeError(_msg(e)));
+    }
+  }
+
+  /// Rechargement silencieux : pas d'écran de chargement, la fiche reste
+  /// lisible pendant que le suivi se met à jour en arrière-plan.
+  Future<void> _onRechargerCommande(
+      RechargerCommande event, Emitter<CommandeState> emit) async {
+    try {
+      final commande = await repository.getCommande(event.commandeId);
+      emit(CommandeMiseAJour(commande));
+    } catch (_) {
+      // Sans réseau, on garde simplement l'état affiché.
     }
   }
 

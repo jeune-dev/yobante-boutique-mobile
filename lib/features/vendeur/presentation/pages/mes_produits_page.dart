@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../../../injection_container.dart';
 import '../../../home/data/models/produit_model.dart';
+import '../../../home/presentation/pages/acheteur/produit_detail_page.dart';
+import '../../../home/presentation/widgets/produit_card.dart' show grilleProduits;
 import '../bloc/vendeur_produit_bloc.dart';
+import '../widgets/carte_produit_vendeur.dart';
 import '../widgets/statut_chip.dart';
 import 'produit_form_page.dart';
 
@@ -73,6 +75,21 @@ class _ListeProduitsVue extends StatelessWidget {
 
   const _ListeProduitsVue({required this.statut, required this.messageVide});
 
+  /// Ouvre la fiche du produit telle qu'elle apparaît au client.
+  ///
+  /// Sans les suggestions de fin de page : le vendeur regarde son produit, pas
+  /// le catalogue des autres.
+  void _ouvrirApercu(BuildContext context, ProduitModel produit) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ProduitDetailPage(
+          produit: produit,
+          apercuVendeur: true,
+        ),
+      ),
+    );
+  }
+
   Future<void> _ouvrirForm(BuildContext context, {ProduitModel? produit}) async {
     final bloc = context.read<VendeurProduitBloc>();
     final res = await Navigator.of(context).push<bool>(
@@ -127,12 +144,16 @@ class _ListeProduitsVue extends StatelessWidget {
           return RefreshIndicator(
             onRefresh: () async =>
                 context.read<VendeurProduitBloc>().add(LoadMesProduits(statut: statut)),
-            child: ListView.separated(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 110),
+            // Même grille que la boutique : le vendeur voit son catalogue
+            // exactement comme le client le verra.
+            child: GridView.builder(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 110),
+              physics: const AlwaysScrollableScrollPhysics(),
+              gridDelegate: grilleProduits,
               itemCount: state.produits.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 12),
-              itemBuilder: (context, i) => _CarteProduit(
+              itemBuilder: (context, i) => CarteProduitVendeur(
                 produit: state.produits[i],
+                onTap: () => _ouvrirApercu(context, state.produits[i]),
                 onModifier: () => _ouvrirForm(context, produit: state.produits[i]),
                 onSupprimer: () => _confirmerSuppression(
                   context,
@@ -245,103 +266,4 @@ class _ListeProduitsVue extends StatelessWidget {
       ),
     );
   }
-}
-
-class _CarteProduit extends StatelessWidget {
-  final ProduitModel produit;
-  final VoidCallback onModifier;
-  final VoidCallback onSupprimer;
-
-  const _CarteProduit({
-    required this.produit,
-    required this.onModifier,
-    required this.onSupprimer,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: VendeurCouleurs.blanc,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: VendeurCouleurs.bordure),
-      ),
-      padding: const EdgeInsets.all(10),
-      child: Row(
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: produit.image.isNotEmpty
-                ? CachedNetworkImage(
-                    imageUrl: produit.image,
-                    width: 62,
-                    height: 62,
-                    fit: BoxFit.cover,
-                    errorWidget: (_, __, ___) => _imageParDefaut(),
-                  )
-                : _imageParDefaut(),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  produit.nom,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    color: VendeurCouleurs.noir,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  '${produit.prix} FCFA',
-                  style: const TextStyle(
-                    color: VendeurCouleurs.bleu,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    StatutChip(statut: produit.statutValidation, compact: true),
-                    const SizedBox(width: 6),
-                    Text(
-                      'Stock ${produit.stock}',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: produit.stock == 0
-                            ? VendeurCouleurs.rouge
-                            : VendeurCouleurs.gris,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          PopupMenuButton<String>(
-            onSelected: (v) => v == 'edit' ? onModifier() : onSupprimer(),
-            // Pas de bascule de disponibilité : le backend ne l'expose pas.
-            // Le retrait passe par « Retirer », qui désactive le produit.
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'edit', child: Text('Modifier')),
-              PopupMenuItem(value: 'delete', child: Text('Retirer')),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _imageParDefaut() => Container(
-        width: 62,
-        height: 62,
-        color: VendeurCouleurs.fond,
-        child: const Icon(Icons.image_not_supported_outlined, color: VendeurCouleurs.gris),
-      );
 }

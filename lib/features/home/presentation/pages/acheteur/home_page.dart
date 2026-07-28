@@ -28,8 +28,6 @@ import '../../../../commande/data/datasources/commande_remote_datasource.dart';
 import '../../../../commande/data/services/panier_service.dart';
 import '../../../../commande/presentation/pages/panier_page.dart';
 import 'boutiques_page.dart';
-import 'produit_detail_page.dart';
-import 'produit_page.dart';
 import 'categorie_produits_page.dart';
 import 'rayon_produits_page.dart';
 import 'profil_page.dart';
@@ -40,7 +38,9 @@ import '../../../../compte/presentation/bloc/compte_event.dart';
 import '../../../../compte/presentation/bloc/compte_state.dart';
 import '../../../../../core/widgets/cloche_notifications.dart';
 import '../../../../../core/utils/image_cloudinary.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import '../../../../../core/utils/image_asset.dart';
+import '../../widgets/produit_card.dart';
+import '../../widgets/rayon_tuile.dart';
 import '../../../../promotions/presentation/pages/section_promotions_page.dart';
 import '../../../data/datasources/banniere_remote_datasource.dart';
 import '../../../data/models/banniere_model.dart';
@@ -99,6 +99,13 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   StreamSubscription? _compteSub;
   User? get _user => widget.user ?? _liveUser;
 
+  /// Session connue dès la construction, sans attendre le profil.
+  ///
+  /// L'en-tête se basait sur l'utilisateur chargé : le temps que `/profile`
+  /// réponde, un client connecté voyait le bouton « Se connecter ». Le profil
+  /// ne sert plus qu'à remplir le nom et l'avatar.
+  bool _estConnecte = sl<TokenService>().estConnecte;
+
   List<BoutiqueModel> _boutiques      = [];
   bool                _boutiquesLoad  = false;
   String?             _boutiquesError;
@@ -135,11 +142,20 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   // Bannières du haut, également pilotées depuis le dashboard.
   List<BanniereModel> _bannieres = [];
 
+  /// Sous-sections affichables d'une section : celles qui portent un visuel.
+  ///
+  /// C'est cette liste — et non la liste brute — que les carrousels parcourent.
+  /// Indexer les sous-sections brutes désignerait la mauvaise page dès qu'une
+  /// d'entre elles n'a pas d'image, puisqu'elle n'occupe alors aucune place à
+  /// l'écran.
+  List<BlocPromoModel> _blocsAffichables(String section) =>
+      (_blocsParSection[section] ?? const <BlocPromoModel>[])
+          .where((b) => (b.image ?? '').isNotEmpty)
+          .toList();
+
   /// Images d'une section, dans l'ordre défini par l'administration.
-  List<String> _imagesSection(String section) => (_blocsParSection[section] ?? [])
-      .map((b) => b.image ?? '')
-      .where((url) => url.isNotEmpty)
-      .toList();
+  List<String> _imagesSection(String section) =>
+      _blocsAffichables(section).map((b) => b.image!).toList();
 
   @override
   void initState() {
@@ -166,6 +182,10 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       });
       // Ne charger le profil que si un token existe (sinon 401 inutile en invité).
       sl<TokenService>().isAuthenticated.then((connecte) {
+        if (!mounted) return;
+        // Confirme l'état amorcé au démarrage : un jeton effacé entre-temps
+        // (session expirée) doit ramener l'en-tête visiteur.
+        if (connecte != _estConnecte) setState(() => _estConnecte = connecte);
         if (connecte) _compteBloc.add(LoadCompte());
       });
     }
@@ -384,8 +404,9 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
   // ── Barre du haut ───────────────────────────────────────────────────────────
   Widget _buildTopBar(String initiales) {
-    final connecte = _user != null;
-    final hasPhoto = connecte && (_user?.photoProfil?.isNotEmpty ?? false);
+    // La session décide de l'interface ; le profil ne fait que la garnir.
+    final connecte = _estConnecte || _user != null;
+    final hasPhoto = _user?.photoProfil?.isNotEmpty ?? false;
 
     return Container(
       decoration: const BoxDecoration(
@@ -399,9 +420,10 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           child: Row(
             children: [
               // ── Pictogramme Yobante à gauche
-              Image.asset(
+              imageAsset(
+                context,
                 'assets/images/Logo Yobante pictogramme - Version.png',
-                height: 76,
+                hauteur: 76,
                 fit: BoxFit.contain,
               ),
               const Spacer(),
@@ -451,6 +473,11 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                           child: Image.network(
                             _user!.photoProfil!,
                             width: 40, height: 40, fit: BoxFit.cover,
+                            // Une photo de profil pèse plusieurs Mo : sans
+                            // cacheWidth elle est décodée en pleine résolution
+                            // pour une vignette de 40 points.
+                            cacheWidth:
+                                (40 * MediaQuery.of(context).devicePixelRatio).round(),
                             errorBuilder: (_, __, ___) => Center(
                               child: Text(initiales,
                                   style: GoogleFonts.sora(
@@ -458,7 +485,9 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                             ),
                           ),
                         )
-                      : connecte
+                      // Les initiales n'apparaissent qu'une fois le profil
+                      // connu : les afficher avant donnerait un « ? ».
+                      : _user != null
                           ? Center(
                               child: Text(initiales,
                                   style: GoogleFonts.sora(
@@ -500,9 +529,10 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(20),
-            child: Image.asset(
+            child: imageAsset(
+              context,
               'assets/images/banniere du haut.png',
-              width: double.infinity,
+              largeur: double.infinity,
               fit: BoxFit.fitWidth,
             ),
           ),
@@ -557,10 +587,11 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             color: _C.bg,
           ),
           // Une bannière illisible ne doit pas casser la mise en page.
-          errorWidget: (_, __, ___) => Image.asset(
+          errorWidget: (_, __, ___) => imageAsset(
+            context,
             'assets/images/banniere du haut.png',
-            width: pleineLargeur ? double.infinity : 320,
-            height: pleineLargeur ? null : 168,
+            largeur: pleineLargeur ? double.infinity : 320,
+            hauteur: pleineLargeur ? null : 168,
             fit: BoxFit.cover,
           ),
         ),
@@ -622,7 +653,9 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   /// Ouvre la page d'une section, en reprenant le titre et le visuel de la
   /// sous-section touchée.
   void _ouvrirSection(String section, {int index = 0}) {
-    final blocs = _blocsParSection[section] ?? const [];
+    // Même liste que celle parcourue par les carrousels : la vignette touchée
+    // et la page ouverte désignent ainsi toujours la même sous-section.
+    final blocs = _blocsAffichables(section);
     final bloc = index < blocs.length ? blocs[index] : null;
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -670,7 +703,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             child: ClipRRect(
               borderRadius: BorderRadius.circular(18),
               child: utiliseSecours
-                  ? Image.asset(secours[i], width: 302, height: 170, fit: BoxFit.cover)
+                  ? imageAsset(context, secours[i],
+                      largeur: 302, hauteur: 170, fit: BoxFit.cover)
                   : CachedNetworkImage(
                       imageUrl: imageOptimisee(distantes[i], largeur: 302),
                       width: 302,
@@ -916,12 +950,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               padding: EdgeInsets.zero,
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 4,
-                crossAxisSpacing: 10,
-                mainAxisSpacing: 10,
-                childAspectRatio: 0.82,
-              ),
+              gridDelegate: grilleRayons,
               itemCount: _rayonsApi.length,
               itemBuilder: (_, i) => _buildRayonApiCard(_rayonsApi[i]),
             )
@@ -930,12 +959,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               padding: EdgeInsets.zero,
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 4,
-                crossAxisSpacing: 10,
-                mainAxisSpacing: 10,
-                childAspectRatio: 0.82,
-              ),
+              gridDelegate: grilleRayons,
               itemCount: _rayons.length,
               itemBuilder: (_, i) => _buildRayonCard(_rayons[i]),
             ),
@@ -946,82 +970,23 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
   // Carte rayon provenant de l'API (RayonModel).
   Widget _buildRayonApiCard(RayonModel rayon) {
-    final hasImage = rayon.image != null && rayon.image!.isNotEmpty;
-    return GestureDetector(
+    return RayonTuile(
+      nom: rayon.nom,
+      image: rayon.image,
       onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => RayonProduitsPage(rayon: rayon),
-        ),
-      ),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-        decoration: BoxDecoration(
-          color: _C.green,
-          borderRadius: BorderRadius.circular(15),
-          boxShadow: [
-            BoxShadow(
-                color: _C.green.withOpacity(0.18),
-                blurRadius: 10, offset: const Offset(0, 5)),
-          ],
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            if (hasImage)
-              ClipRRect(
-                borderRadius: BorderRadius.circular(6),
-                child: CachedNetworkImage(
-                  imageUrl: rayon.image!,
-                  width: 28, height: 28, fit: BoxFit.cover,
-                  errorWidget: (_, __, ___) =>
-                      const Icon(Icons.category_rounded, color: _C.white, size: 21),
-                ),
-              )
-            else
-              const Icon(Icons.category_rounded, color: _C.white, size: 21),
-            const SizedBox(height: 6),
-            Text(rayon.nom,
-                textAlign: TextAlign.center,
-                maxLines: 2, overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.dmSans(
-                    fontSize: 9.5, fontWeight: FontWeight.w700,
-                    color: _C.white, height: 1.1)),
-          ],
-        ),
+        MaterialPageRoute(builder: (_) => RayonProduitsPage(rayon: rayon)),
       ),
     );
   }
 
+  // Rayon de repli, tant que l'administration n'a rien publié.
   Widget _buildRayonCard(_Rayon rayon) {
-    return GestureDetector(
+    return RayonTuile(
+      nom: rayon.label,
+      icone: rayon.icon,
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => CategorieProduitsPage(titre: rayon.label, icon: rayon.icon),
-        ),
-      ),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-        decoration: BoxDecoration(
-          color: _C.green,
-          borderRadius: BorderRadius.circular(15),
-          boxShadow: [
-            BoxShadow(
-                color: _C.green.withOpacity(0.18),
-                blurRadius: 10, offset: const Offset(0, 5)),
-          ],
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(rayon.icon, color: _C.white, size: 21),
-            const SizedBox(height: 6),
-            Text(rayon.label,
-                textAlign: TextAlign.center,
-                maxLines: 2, overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.dmSans(
-                    fontSize: 9.5, fontWeight: FontWeight.w700,
-                    color: _C.white, height: 1.1)),
-          ],
         ),
       ),
     );
@@ -1070,11 +1035,14 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                         color: _C.black, letterSpacing: -0.4)),
                 const Spacer(),
                 GestureDetector(
+                  // Comme le « Voir tous » des autres sections : on présente
+                  // d'abord les sous-sections, chacune menant à ses produits.
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute(
-                      builder: (_) => SectionPromotionsPage(
+                      builder: (_) => BlocsSectionPage(
                         section: 'nos_promos_a_venir',
                         titre: _titresSections['nos_promos_a_venir']!,
+                        blocs: _blocsParSection['nos_promos_a_venir'] ?? const [],
                       ),
                     ),
                   ),
@@ -1096,14 +1064,19 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               itemBuilder: (_, i) => Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: GestureDetector(
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const PromotionsActivesPage()),
-                  ),
+                  // Chaque sous-section ouvre sa propre page, comme dans les
+                  // autres carrousels de l'accueil : toutes menaient jusqu'ici
+                  // à la liste de toutes les promotions, quelle que soit la
+                  // bannière touchée.
+                  onTap: () => _ouvrirSection('nos_promos_a_venir', index: i),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(18),
                     child: isNetwork
                         ? CachedNetworkImage(
-                            imageUrl: imgs[i],
+                            // Comme les autres carrousels : la bannière est
+                            // demandée à sa taille d'affichage, pas en 1,9 Mo.
+                            imageUrl: imageOptimisee(imgs[i],
+                                largeur: bannerW.round()),
                             width: bannerW,
                             height: bannerH,
                             fit: BoxFit.cover,
@@ -1112,10 +1085,11 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                               child: const Icon(Icons.image_outlined, color: _C.label),
                             ),
                           )
-                        : Image.asset(
+                        : imageAsset(
+                            context,
                             imgs[i],
-                            width: bannerW,
-                            height: bannerH,
+                            largeur: bannerW,
+                            hauteur: bannerH,
                             fit: BoxFit.cover,
                           ),
                   ),
@@ -1478,7 +1452,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2, crossAxisSpacing: 12, mainAxisSpacing: 12, childAspectRatio: 0.80),
+                  crossAxisCount: 2, crossAxisSpacing: 12, mainAxisSpacing: 12, childAspectRatio: 0.56),
               itemCount: produits.length,
               itemBuilder: (_, i) => _buildProductCard(produits[i]),
             );
@@ -1506,10 +1480,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   }
 
   Widget _buildProductCard(ProduitModel produit) {
-    return ProduitGridCard(
+    return ProduitCard(
       produit: produit,
-      onTap: () => showProduitModal(context, produit),
-      onAdd: () => ajouterProduitAuPanier(context, produit),
     );
   }
 
@@ -1720,12 +1692,12 @@ class _BoutiqueSheetState extends State<_BoutiqueSheet> {
                   ? _buildEmpty()
                   : GridView.builder(
                 controller: controller,
-                padding: const EdgeInsets.fromLTRB(18, 0, 18, 30),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2, crossAxisSpacing: 12,
-                    mainAxisSpacing: 12, childAspectRatio: 0.75),
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 30),
+                gridDelegate: grilleProduits,
                 itemCount: _produits.length,
-                itemBuilder: (_, i) => _buildProductCard(_produits[i]),
+                itemBuilder: (_, i) => ProduitCard(
+                  produit: _produits[i],
+                ),
               ),
             ),
           ],
@@ -1762,72 +1734,6 @@ class _BoutiqueSheetState extends State<_BoutiqueSheet> {
         Text('Aucun produit dans cette boutique',
             style: GoogleFonts.dmSans(fontSize: 14, color: _C.label)),
       ]),
-    );
-  }
-
-  // ── Carte produit avec bouton WhatsApp ────────────────────────────────────
-  Widget _buildProductCard(ProduitModel produit) {
-    return Container(
-      decoration: BoxDecoration(
-          color: _C.bg, borderRadius: BorderRadius.circular(18), border: Border.all(color: _C.border)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Image
-          Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                color: _C.surface,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(17)),
-                image: produit.image.isNotEmpty
-                    ? DecorationImage(image: NetworkImage(produit.image), fit: BoxFit.cover)
-                    : null,
-              ),
-              child: Stack(children: [
-                Positioned(top: 8, right: 8,
-                    child: Container(width: 28, height: 28,
-                        decoration: BoxDecoration(color: Colors.white.withOpacity(0.9), shape: BoxShape.circle),
-                        child: const Icon(Icons.favorite_border_rounded, size: 14, color: _C.label))),
-              ]),
-            ),
-          ),
-          // Infos + boutons
-          Padding(
-            padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(produit.nom, style: GoogleFonts.sora(fontSize: 12, fontWeight: FontWeight.w700, color: _C.black),
-                    maxLines: 1, overflow: TextOverflow.ellipsis),
-                const SizedBox(height: 2),
-                Text(produit.ville, style: GoogleFonts.dmSans(fontSize: 10, color: _C.label)),
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    RichText(text: TextSpan(children: [
-                      TextSpan(text: produit.prix, style: GoogleFonts.sora(fontSize: 13, fontWeight: FontWeight.w800, color: _C.black)),
-                      TextSpan(text: ' F',         style: GoogleFonts.dmSans(fontSize: 10, color: _C.label)),
-                    ])),
-                    // ── Bouton WhatsApp ──────────────────────────────────
-                    GestureDetector(
-                      onTap: () => _contactWhatsapp(produit.id),
-                      child: Container(
-                        width: 28, height: 28,
-                        decoration: BoxDecoration(
-                          color: _C.whatsapp,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Icon(Icons.chat_rounded, color: _C.white, size: 15),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

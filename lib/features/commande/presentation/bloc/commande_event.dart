@@ -16,23 +16,28 @@ class LoadMesCommandes extends CommandeEvent {
 /// Acheteur : créer une commande à partir du panier.
 ///
 /// Le panier est tenu côté client (PanierService) : il est envoyé avec la
-/// commande. Si vendeurId est null, on prend tous les articles, sinon
-/// seulement ceux de ce vendeur.
+/// commande. [produitIds] limite l'envoi aux articles cochés ; nul, on prend
+/// tout le panier.
 class CreerCommande extends CommandeEvent {
   final String adresseId;
   final String methode; // wave | orange_money | carte | cash_livraison
-  final String? vendeurId; // Si null, tous les articles ; sinon, seulement ceux de ce vendeur
+  final Set<String>? produitIds;
   final String? note;
+
+  /// Date à laquelle le client souhaite être livré. Facultative.
+  final DateTime? dateLivraisonSouhaitee;
 
   CreerCommande({
     required this.adresseId,
     required this.methode,
-    this.vendeurId,
+    this.produitIds,
     this.note,
+    this.dateLivraisonSouhaitee,
   });
 
   @override
-  List<Object?> get props => [adresseId, methode, vendeurId, note];
+  List<Object?> get props =>
+      [adresseId, methode, produitIds, note, dateLivraisonSouhaitee];
 }
 
 /// Acheteur : lancer le règlement d'une commande déjà créée
@@ -47,6 +52,17 @@ class PayerCommande extends CommandeEvent {
 class VerifierPaiement extends CommandeEvent {
   final String commandeId;
   VerifierPaiement(this.commandeId);
+  @override
+  List<Object?> get props => [commandeId];
+}
+
+/// Acheteur : recharger une commande précise.
+///
+/// La fiche détail s'en sert pour suivre l'avancement décidé par
+/// l'administration, sans recharger toute la liste.
+class RechargerCommande extends CommandeEvent {
+  final String commandeId;
+  RechargerCommande(this.commandeId);
   @override
   List<Object?> get props => [commandeId];
 }

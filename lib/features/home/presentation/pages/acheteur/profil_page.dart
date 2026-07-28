@@ -3,8 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:yobante/features/auth/domain/entities/user.dart';
 import 'package:yobante/core/routes/app_router.dart';
-import '../../../../auth/presentation/bloc/auth_bloc.dart';
-import '../../../../auth/presentation/bloc/auth_event.dart';
+import '../../../../../core/services/token_service.dart';
 import '../../../../../injection_container.dart';
 import '../../../../compte/presentation/bloc/compte_bloc.dart';
 import '../../../../compte/presentation/bloc/compte_event.dart';
@@ -21,6 +20,7 @@ import 'package:yobante/features/home/presentation/pages/vendeur/main_vendeur_pa
 import '../../../../favoris/data/datasources/favoris_remote_datasource.dart';
 import '../../../../commande/data/datasources/commande_remote_datasource.dart';
 import '../../../../commande/data/services/panier_service.dart';
+import '../../../../auth/presentation/deconnexion.dart';
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
 class _C {
@@ -105,8 +105,11 @@ class _ProfilPageState extends State<ProfilPage>
   // ── Helpers ────────────────────────────────────────────────────────────────
   User? get _user => _liveUser ?? widget.user;
 
-  /// Client connecté (un profil a été chargé) ou simple invité.
-  bool get _estConnecte => _user != null;
+  /// Client connecté ou simple invité.
+  ///
+  /// Décidé sur la session, pas sur le profil chargé : un client connecté
+  /// voyait sinon l'écran « Invité » le temps que `/profile` réponde.
+  bool get _estConnecte => _user != null || sl<TokenService>().estConnecte;
 
   Future<void> _onEditProfil() async {
     final updated = await Navigator.of(context).push<User>(
@@ -194,10 +197,7 @@ class _ProfilPageState extends State<ProfilPage>
                 ElevatedButton(
                   onPressed: () {
                     Navigator.pop(context);
-                    context.read<AuthBloc>().add(LogoutRequested());
-                    Navigator.of(context).pushNamedAndRemoveUntil(
-                      AppRouter.acheteurRoute, (_) => false,
-                    );
+                    deconnecterEtRetournerBoutique(context);
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: _C.red,
@@ -246,10 +246,9 @@ class _ProfilPageState extends State<ProfilPage>
         if (state is CompteLoaded) {
           setState(() => _liveUser = state.user);
         } else if (state is CompteAccountDeleted) {
-          context.read<AuthBloc>().add(LogoutRequested());
-          Navigator.of(context).pushNamedAndRemoveUntil(
-            AppRouter.loginRoute, (_) => false,
-          );
+          // Le compte n'existe plus : il n'y a rien à quoi se reconnecter, on
+          // rouvre la boutique en visiteur.
+          deconnecterEtRetournerBoutique(context);
         } else if (state is CompteError) {
           // On n'affiche l'erreur que pour un client connecté : un invité
           // (sans compte) reçoit naturellement un 401, ce n'est pas une erreur.

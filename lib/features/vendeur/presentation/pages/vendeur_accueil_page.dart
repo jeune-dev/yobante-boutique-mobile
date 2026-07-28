@@ -6,6 +6,7 @@ import '../../data/models/vendeur_ventes_model.dart';
 import '../../domain/usecases/get_vendeur_tableau_bord.dart';
 import '../widgets/entete_vendeur.dart';
 import '../widgets/statut_chip.dart';
+import 'produit_form_page.dart';
 
 /// Accueil vendeur : vision synthétique des ventes et de l'état du catalogue.
 ///
@@ -87,6 +88,8 @@ class _VendeurAccueilPageState extends State<VendeurAccueilPage> {
                     _carteChiffreAffaires(),
                     const SizedBox(height: 14),
                     _tuilesVentes(),
+                    const SizedBox(height: 14),
+                    _boutonPublier(),
                     const SizedBox(height: 22),
                     _titre('Ventes des ${_ventes.periode.jours} derniers jours'),
                     const SizedBox(height: 12),
@@ -220,6 +223,46 @@ class _VendeurAccueilPageState extends State<VendeurAccueilPage> {
           ),
         ),
       ],
+    );
+  }
+
+  /// Raccourci vers le dépôt d'une demande de publication.
+  ///
+  /// Même parcours que l'onglet « Demandes » : le formulaire crée le produit
+  /// en attente de validation. Placé sous les compteurs, là où le vendeur
+  /// regarde son activité et décide d'enrichir son catalogue.
+  Widget _boutonPublier() {
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton.icon(
+        onPressed: _publierUnProduit,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: VendeurCouleurs.or,
+          foregroundColor: VendeurCouleurs.noir,
+          elevation: 0,
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        ),
+        icon: const Icon(Icons.add_rounded, size: 20),
+        label: const Text(
+          'Publier un produit',
+          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14.5),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _publierUnProduit() async {
+    final envoye = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => const ProduitFormPage()),
+    );
+    if (envoye != true || !mounted) return;
+    // Le catalogue et les compteurs changent : on recharge le tableau de bord.
+    _charger();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Demande envoyée — en attente de validation'),
+      ),
     );
   }
 

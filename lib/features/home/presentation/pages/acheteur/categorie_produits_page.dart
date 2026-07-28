@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:yobante/core/connection/auth_interceptor.dart';
 
 import '../../../../../injection_container.dart';
 import '../../../data/models/produit_model.dart';
 import '../../../data/datasources/produit_remote_datasource.dart';
-import '../../../../commande/data/services/panier_service.dart';
-import '../../../../commande/data/models/panier_item.dart';
 import '../../../../commande/presentation/pages/panier_page.dart';
+import '../../widgets/produit_card.dart';
 
 class _C {
   static const green      = Color(0xFF163A9E);
@@ -15,8 +13,6 @@ class _C {
   static const black      = Color(0xFF1A1A1A);
   static const white      = Color(0xFFFFFFFF);
   static const bg         = Color(0xFFF5F7FB);
-  static const surface    = Color(0xFFF7F9FC);
-  static const border     = Color(0xFFDDE3EF);
   static const label      = Color(0xFF9AA3B2);
   static const sub        = Color(0xFF6B7280);
 }
@@ -42,7 +38,6 @@ class CategorieProduitsPage extends StatefulWidget {
 
 class _CategorieProduitsPageState extends State<CategorieProduitsPage> {
   final _ds = sl<ProduitRemoteDataSource>();
-  final _panier = sl<PanierService>();
 
   List<ProduitModel> _produits = [];
   bool _loading = true;
@@ -64,32 +59,6 @@ class _CategorieProduitsPageState extends State<CategorieProduitsPage> {
       if (!mounted) return;
       setState(() { _error = 'Chargement impossible'; _loading = false; });
     }
-  }
-
-  Future<void> _addCart(ProduitModel p) async {
-    await _panier.ajouter(PanierItem(
-      produitId: p.id,
-      nom: p.nom,
-      prix: double.tryParse(p.prix) ?? 0,
-      image: p.image,
-      vendeurId: p.vendeurId,
-      vendeurNom: p.vendeurNom,
-    ));
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text('${p.nom} ajouté au panier'),
-      backgroundColor: _C.green,
-      behavior: SnackBarBehavior.floating,
-      duration: const Duration(seconds: 2),
-      action: SnackBarAction(
-        label: 'Voir',
-        textColor: Colors.white,
-        onPressed: () => AuthInterceptor.navigatorKey.currentState?.push(
-          MaterialPageRoute(builder: (_) => const PanierPage()),
-        ),
-      ),
-    ));
   }
 
   @override
@@ -164,12 +133,12 @@ class _CategorieProduitsPageState extends State<CategorieProduitsPage> {
       color: _C.green,
       onRefresh: _load,
       child: GridView.builder(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 30),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2, crossAxisSpacing: 12, mainAxisSpacing: 12, childAspectRatio: 0.72,
-        ),
+        padding: const EdgeInsets.fromLTRB(12, 16, 12, 30),
+        gridDelegate: grilleProduits,
         itemCount: _produits.length,
-        itemBuilder: (_, i) => _produitCard(_produits[i]),
+        itemBuilder: (_, i) => ProduitCard(
+          produit: _produits[i],
+        ),
       ),
     );
   }
@@ -199,63 +168,6 @@ class _CategorieProduitsPageState extends State<CategorieProduitsPage> {
             ],
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _produitCard(ProduitModel p) {
-    return Container(
-      decoration: BoxDecoration(
-        color: _C.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: _C.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                color: _C.surface,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(17)),
-                image: p.image.isNotEmpty
-                    ? DecorationImage(image: NetworkImage(p.image), fit: BoxFit.cover)
-                    : null,
-              ),
-              child: p.image.isEmpty
-                  ? const Center(child: Icon(Icons.image_outlined, color: _C.label))
-                  : null,
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(p.nom, maxLines: 1, overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.sora(fontSize: 12, fontWeight: FontWeight.w700, color: _C.black)),
-                const SizedBox(height: 6),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    RichText(text: TextSpan(children: [
-                      TextSpan(text: p.prix, style: GoogleFonts.sora(fontSize: 13, fontWeight: FontWeight.w800, color: _C.black)),
-                      TextSpan(text: ' F', style: GoogleFonts.dmSans(fontSize: 10, color: _C.label)),
-                    ])),
-                    GestureDetector(
-                      onTap: () => _addCart(p),
-                      child: Container(
-                        width: 30, height: 30,
-                        decoration: BoxDecoration(color: _C.green, borderRadius: BorderRadius.circular(9)),
-                        child: const Icon(Icons.add_rounded, color: _C.white, size: 18),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }

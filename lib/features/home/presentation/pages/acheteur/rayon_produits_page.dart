@@ -1,4 +1,3 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'dart:async';
@@ -8,16 +7,14 @@ import '../../../data/datasources/produit_remote_datasource.dart';
 import '../../../data/models/produit_model.dart';
 import '../../../data/models/rayon_model.dart';
 import '../../../../commande/data/services/panier_service.dart';
-import '../../../../commande/data/models/panier_item.dart';
 import '../../../../commande/presentation/pages/panier_page.dart';
+import '../../widgets/produit_card.dart';
 
 class _C {
   static const green      = Color(0xFF163A9E);
-  static const greenLight = Color(0xFFEAEEF9);
   static const black      = Color(0xFF1A1A1A);
   static const white      = Color(0xFFFFFFFF);
   static const bg         = Color(0xFFF5F7FB);
-  static const surface    = Color(0xFFF7F9FC);
   static const border     = Color(0xFFDDE3EF);
   static const label      = Color(0xFF9AA3B2);
   static const sub        = Color(0xFF6B7280);
@@ -37,7 +34,6 @@ class RayonProduitsPage extends StatefulWidget {
 
 class _RayonProduitsPageState extends State<RayonProduitsPage> {
   final _ds     = sl<ProduitRemoteDataSource>();
-  final _panier = sl<PanierService>();
 
   List<ProduitModel> _produits   = [];
   bool               _loading    = true;
@@ -134,33 +130,6 @@ class _RayonProduitsPageState extends State<RayonProduitsPage> {
     if (_selectedSousRayonId == id) return;
     setState(() => _selectedSousRayonId = id);
     _load(reset: true);
-  }
-
-  Future<void> _addCart(ProduitModel p) async {
-    await _panier.ajouter(PanierItem(
-      produitId: p.id,
-      nom: p.nom,
-      prix: double.tryParse(p.prix) ?? 0,
-      image: p.image,
-      vendeurId: p.vendeurId,
-      vendeurNom: p.vendeurNom,
-    ));
-    if (!mounted) return;
-    ScaffoldMessenger.of(context)
-      ..clearSnackBars()
-      ..showSnackBar(SnackBar(
-        content: Text('${p.nom} ajouté au panier'),
-        backgroundColor: _C.green,
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 2),
-        action: SnackBarAction(
-          label: 'Voir',
-          textColor: Colors.white,
-          onPressed: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const PanierPage()),
-          ),
-        ),
-      ));
   }
 
   @override
@@ -354,20 +323,15 @@ class _RayonProduitsPageState extends State<RayonProduitsPage> {
       onRefresh: () => _load(reset: true),
       child: GridView.builder(
         controller: _scrollCtrl,
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 30),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          crossAxisSpacing: 12,
-          mainAxisSpacing: 12,
-          childAspectRatio: 0.72,
-        ),
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 30),
+        gridDelegate: grilleProduits,
         itemCount: _produits.length + (_loadingMore ? 2 : 0),
         itemBuilder: (_, i) {
           if (i >= _produits.length) {
             return Container(
               decoration: BoxDecoration(
                 color: _C.white,
-                borderRadius: BorderRadius.circular(18),
+                borderRadius: BorderRadius.circular(14),
                 border: Border.all(color: _C.border),
               ),
               child: const Center(
@@ -375,7 +339,9 @@ class _RayonProduitsPageState extends State<RayonProduitsPage> {
                       color: _C.green, strokeWidth: 2)),
             );
           }
-          return _produitCard(_produits[i]);
+          return ProduitCard(
+            produit: _produits[i],
+          );
         },
       ),
     );
@@ -411,97 +377,6 @@ class _RayonProduitsPageState extends State<RayonProduitsPage> {
             ],
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _produitCard(ProduitModel p) {
-    final hasPrix = p.prix.isNotEmpty && p.prix != '0';
-    return Container(
-      decoration: BoxDecoration(
-        color: _C.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: _C.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Image
-          Expanded(
-            child: ClipRRect(
-              borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(17)),
-              child: p.image.isNotEmpty
-                  ? CachedNetworkImage(
-                      imageUrl: p.image,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                      placeholder: (_, __) => Container(color: _C.surface),
-                      errorWidget: (_, __, ___) => Container(
-                        color: _C.surface,
-                        child: const Center(
-                            child: Icon(Icons.image_outlined,
-                                color: _C.label)),
-                      ),
-                    )
-                  : Container(
-                      color: _C.surface,
-                      child: const Center(
-                          child: Icon(Icons.image_outlined,
-                              color: _C.label)),
-                    ),
-            ),
-          ),
-          // Infos
-          Padding(
-            padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(p.nom,
-                    maxLines: 1, overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.sora(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: _C.black)),
-                const SizedBox(height: 6),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    if (hasPrix)
-                      RichText(
-                        text: TextSpan(children: [
-                          TextSpan(
-                              text: p.prix,
-                              style: GoogleFonts.sora(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w800,
-                                  color: _C.black)),
-                          TextSpan(
-                              text: ' F',
-                              style: GoogleFonts.dmSans(
-                                  fontSize: 10, color: _C.label)),
-                        ]),
-                      )
-                    else
-                      const SizedBox.shrink(),
-                    GestureDetector(
-                      onTap: () => _addCart(p),
-                      child: Container(
-                        width: 30, height: 30,
-                        decoration: BoxDecoration(
-                            color: _C.green,
-                            borderRadius: BorderRadius.circular(9)),
-                        child: const Icon(Icons.add_rounded,
-                            color: _C.white, size: 18),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }

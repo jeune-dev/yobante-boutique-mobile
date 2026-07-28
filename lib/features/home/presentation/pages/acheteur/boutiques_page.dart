@@ -3,17 +3,13 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:geolocator/geolocator.dart';
 
-import 'produit_detail_page.dart';
-import 'produit_page.dart';
-import 'package:yobante/core/connection/auth_interceptor.dart';
+import '../../widgets/produit_card.dart';
 
 import '../../../../../injection_container.dart';
 import '../../../data/models/boutique_model.dart';
 import '../../../data/models/produit_model.dart';
 import '../../../data/datasources/produit_remote_datasource.dart';
 import '../../../../favoris/data/datasources/favoris_remote_datasource.dart';
-import '../../../../commande/data/services/panier_service.dart';
-import '../../../../commande/data/models/panier_item.dart';
 import '../../../../commande/presentation/pages/panier_page.dart';
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
@@ -421,7 +417,6 @@ class BoutiqueDetailPage extends StatefulWidget {
 class _BoutiqueDetailPageState extends State<BoutiqueDetailPage> {
   final _produitDS = sl<ProduitRemoteDataSource>();
   final _favDS     = sl<FavorisRemoteDataSource>();
-  final _panier    = sl<PanierService>();
 
   List<ProduitModel> _produits = [];
   bool _loading = true;
@@ -464,39 +459,6 @@ class _BoutiqueDetailPageState extends State<BoutiqueDetailPage> {
         const SnackBar(content: Text('Action sur le favori échouée')),
       );
     }
-  }
-
-  Future<void> _ajouterAuPanier(ProduitModel p) async {
-    await _panier.ajouter(PanierItem(
-      produitId: p.id,
-      nom: p.nom,
-      prix: double.tryParse(p.prix) ?? 0,
-      image: p.image,
-      vendeurId: p.vendeurId,
-      vendeurNom: p.boutiqueNom.trim().isNotEmpty ? p.boutiqueNom : p.vendeurNom,
-    ));
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).clearSnackBars();
-    final controller = ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('${p.nom} ajouté au panier'),
-        backgroundColor: _C.green,
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 2),
-        action: SnackBarAction(
-          label: 'Voir',
-          textColor: Colors.white,
-          onPressed: () => AuthInterceptor.navigatorKey.currentState?.push(
-            MaterialPageRoute(builder: (_) => const PanierPage()),
-          ),
-        ),
-      ),
-    );
-    Future.delayed(const Duration(seconds: 2), () {
-      try {
-        controller.close();
-      } catch (_) {}
-    });
   }
 
   @override
@@ -624,20 +586,16 @@ class _BoutiqueDetailPageState extends State<BoutiqueDetailPage> {
       );
     }
     return GridView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2, crossAxisSpacing: 12, mainAxisSpacing: 12, childAspectRatio: 0.72,
-      ),
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
+      gridDelegate: grilleProduits,
       itemCount: _produits.length,
       itemBuilder: (_, i) => _buildProduitCard(_produits[i]),
     );
   }
 
   Widget _buildProduitCard(ProduitModel p) {
-    return ProduitGridCard(
+    return ProduitCard(
       produit: p,
-      onTap: () => showProduitModal(context, p),
-      onAdd: () => _ajouterAuPanier(p),
     );
   }
 

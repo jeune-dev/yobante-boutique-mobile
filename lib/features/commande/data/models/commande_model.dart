@@ -1,4 +1,11 @@
-// Modèles de données pour les commandes (miroir du backend Yobante (commandes))
+// Modèles de données pour les commandes.
+//
+// Miroir de ce que renvoie réellement le backend Yobante :
+// `{ id, reference, statut, montantTotal, fraisLivraison, dateLivraisonSouhaitee,
+//    note, motifRejet, createdAt, items: [{ …, produit }], adresse, paiement }`.
+
+import 'adresse_model.dart';
+import 'paiement_model.dart';
 
 class LigneCommandeModel {
   final String id;
@@ -20,15 +27,29 @@ class LigneCommandeModel {
   });
 
   factory LigneCommandeModel.fromJson(Map<String, dynamic> json) {
+    // Le nom et l'image vivent dans le produit joint ; la ligne elle-même ne
+    // porte que les montants et la quantité.
+    final produit = json['produit'] as Map<String, dynamic>?;
+
+    String image = (produit?['image'] ?? '').toString();
+    if (image.isEmpty) {
+      final images = produit?['images'];
+      if (images is List && images.isNotEmpty) {
+        final premiere = images.first;
+        image = premiere is Map
+            ? (premiere['url'] ?? '').toString()
+            : premiere.toString();
+      }
+    }
+
     return LigneCommandeModel(
       id: json['id']?.toString() ?? '',
-      produitId: json['produitId']?.toString(),
-      nomProduit: json['nomProduit'] ?? '',
-      imageProduit: json['imageProduit'],
+      produitId: (json['produitId'] ?? produit?['id'])?.toString(),
+      nomProduit:
+          (produit?['nom'] ?? json['nomProduit'] ?? 'Produit').toString(),
+      imageProduit: image.isEmpty ? null : image,
       prixUnitaire: _toDouble(json['prixUnitaire']),
-      quantite: (json['quantite'] ?? 0) is int
-          ? json['quantite']
-          : int.tryParse('${json['quantite']}') ?? 0,
+      quantite: _toInt(json['quantite']),
       sousTotal: _toDouble(json['sousTotal']),
     );
   }
@@ -36,93 +57,99 @@ class LigneCommandeModel {
 
 class CommandeModel {
   final String id;
-  final String referenceCommande;
-  final String acheteurId;
-  final String vendeurId;
-  final double montantProduits;
+  final String reference;
+  final String userId;
   final double fraisLivraison;
   final double montantTotal;
   final String statut;
-  final String statutPaiement;
-  final String modeLivraison;
-  final String modePaiement;
-  final String? adresseLivraison;
-  final String? numeroTelephone;
   final String? note;
-  final DateTime? createdAt;
-  final List<LigneCommandeModel> lignes;
   final String? motifRejet;
+  final DateTime? createdAt;
 
-  // Infos de l'autre partie (selon le point de vue)
-  final String? acheteurNom;
-  final String? acheteurTelephone;
-  final String? vendeurNom;
-  final String? vendeurTelephone;
+  /// Date à laquelle le client souhaite être livré, choisie à la commande.
+  final DateTime? dateLivraisonSouhaitee;
+
+  final List<LigneCommandeModel> lignes;
+
+  /// Adresse de livraison retenue. Absente tant que le backend ne la joint pas
+  /// (anciennes réponses) — l'affichage se replie alors sur un tiret.
+  final AdresseModel? adresse;
+
+  /// Règlement associé : c'est lui qui dit s'il reste quelque chose à payer.
+  final PaiementModel? paiement;
 
   CommandeModel({
     required this.id,
-    required this.referenceCommande,
-    required this.acheteurId,
-    required this.vendeurId,
-    required this.montantProduits,
+    required this.reference,
+    required this.userId,
     required this.fraisLivraison,
     required this.montantTotal,
     required this.statut,
-    required this.statutPaiement,
-    required this.modeLivraison,
-    required this.modePaiement,
-    required this.adresseLivraison,
-    required this.numeroTelephone,
-    required this.note,
-    required this.createdAt,
     required this.lignes,
+    this.note,
     this.motifRejet,
-    this.acheteurNom,
-    this.acheteurTelephone,
-    this.vendeurNom,
-    this.vendeurTelephone,
+    this.createdAt,
+    this.dateLivraisonSouhaitee,
+    this.adresse,
+    this.paiement,
   });
 
+  /// Montant des articles seuls : le backend n'envoie que le total livraison
+  /// comprise, on retire donc les frais plutôt que d'additionner les lignes
+  /// (qui peuvent manquer sur une réponse allégée).
+  double get montantProduits {
+    final somme = lignes.fold<double>(0, (t, l) => t + l.sousTotal);
+    if (somme > 0) return somme;
+    return montantTotal - fraisLivraison;
+  }
+
+  int get nombreArticles => lignes.fold<int>(0, (t, l) => t + l.quantite);
+
+  /// Mode de règlement choisi à la commande.
+  String get modePaiement => paiement?.methode ?? 'cash_livraison';
+
+  /// Vrai quand le client règle au livreur : il n'y a alors rien à payer dans
+  /// l'application, et le bouton de paiement n'a pas lieu d'être.
+  bool get paiementALaLivraison => modePaiement == 'cash_livraison';
+
+  bool get estPaye => paiement?.estPaye ?? false;
+
+  /// Un règlement en ligne reste dû tant qu'il n'a pas abouti.
+  bool get resteAPayer =>
+      !paiementALaLivraison && !estPaye && statut != 'annulee' && statut != 'rejetee';
+
   factory CommandeModel.fromJson(Map<String, dynamic> json) {
-    final lignesRaw = json['lignes'];
-    final lignes = (lignesRaw is List)
-        ? lignesRaw
-            .map((e) => LigneCommandeModel.fromJson(e as Map<String, dynamic>))
+    // `items` côté backend ; `lignes` toléré pour d'anciennes réponses.
+    final brutLignes = json['items'] ?? json['lignes'];
+    final lignes = (brutLignes is List)
+        ? brutLignes
+            .map((e) => LigneCommandeModel.fromJson(
+                Map<String, dynamic>.from(e as Map)))
             .toList()
         : <LigneCommandeModel>[];
 
-    String? joinNom(Map<String, dynamic>? p) {
-      if (p == null) return null;
-      return '${p['prenom'] ?? ''} ${p['nom'] ?? ''}'.trim();
-    }
-
-    final acheteur = json['acheteur'] as Map<String, dynamic>?;
-    final vendeur = json['vendeur'] as Map<String, dynamic>?;
+    final adresse = json['adresse'];
+    final paiement = json['paiement'];
 
     return CommandeModel(
       id: json['id']?.toString() ?? '',
-      referenceCommande: json['referenceCommande'] ?? '',
-      acheteurId: json['acheteurId']?.toString() ?? '',
-      vendeurId: json['vendeurId']?.toString() ?? '',
-      montantProduits: _toDouble(json['montantProduits']),
+      reference: (json['reference'] ?? json['referenceCommande'] ?? '').toString(),
+      userId: (json['userId'] ?? json['acheteurId'] ?? '').toString(),
       fraisLivraison: _toDouble(json['fraisLivraison']),
       montantTotal: _toDouble(json['montantTotal']),
-      statut: json['statut'] ?? 'en_attente',
-      statutPaiement: json['statutPaiement'] ?? 'non_paye',
-      modeLivraison: json['modeLivraison'] ?? 'livraison',
-      modePaiement: json['modePaiement'] ?? 'en_ligne',
-      adresseLivraison: json['adresseLivraison'],
-      numeroTelephone: json['numeroTelephone'],
-      note: json['note'],
-      createdAt: json['createdAt'] != null
-          ? DateTime.tryParse(json['createdAt'].toString())
-          : null,
+      statut: json['statut']?.toString() ?? 'en_attente',
+      note: json['note']?.toString(),
+      motifRejet: json['motifRejet']?.toString(),
+      createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? ''),
+      dateLivraisonSouhaitee:
+          DateTime.tryParse(json['dateLivraisonSouhaitee']?.toString() ?? ''),
       lignes: lignes,
-      motifRejet: json['motifRejet'],
-      acheteurNom: joinNom(acheteur),
-      acheteurTelephone: acheteur?['telephone'],
-      vendeurNom: joinNom(vendeur),
-      vendeurTelephone: vendeur?['telephone'],
+      adresse: adresse is Map
+          ? AdresseModel.fromJson(Map<String, dynamic>.from(adresse))
+          : null,
+      paiement: paiement is Map
+          ? PaiementModel.fromJson(Map<String, dynamic>.from(paiement))
+          : null,
     );
   }
 }
@@ -133,15 +160,27 @@ double _toDouble(dynamic v) {
   return double.tryParse(v.toString()) ?? 0;
 }
 
-// Libellés FR + ordre des statuts pour l'affichage du suivi
+int _toInt(dynamic v) {
+  if (v is int) return v;
+  return int.tryParse(v?.toString() ?? '') ?? 0;
+}
+
+/// Libellés FR des statuts, alignés sur l'énumération du backend.
 const Map<String, String> kStatutCommandeLabels = {
   'en_attente': 'En attente',
-  'confirmee': 'Confirmée',
+  'validee': 'Validée',
   'en_preparation': 'En préparation',
-  'prete': 'Prête',
-  'en_livraison': 'En livraison',
+  'expediee': 'Expédiée',
   'livree': 'Livrée',
   'annulee': 'Annulée',
   'rejetee': 'Rejetée',
-  'validee': 'Validée',
 };
+
+/// Déroulé normal d'une commande, pour le suivi pas à pas.
+const List<String> kSuiviCommande = [
+  'en_attente',
+  'validee',
+  'en_preparation',
+  'expediee',
+  'livree',
+];

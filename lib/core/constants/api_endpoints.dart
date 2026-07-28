@@ -39,6 +39,10 @@ class ProduitEndpoints {
   static const boutiquesProches = '/acheteurs/boutiques-proches';
   static String boutiqueDetail(String id) => '/acheteurs/boutique/$id';
   static String vueProduit(String id) => '/acheteurs/produit/$id/vue';
+
+  /// Produits recommandés par le backend (même catégorie). Repli de la fiche
+  /// détail quand le produit n'est rattaché à aucun rayon.
+  static String produitsRecommandes(String id) => '/produits/$id/recommandes';
 }
 
 /// Alias des endpoints acheteur générique (utilisé par plusieurs features).

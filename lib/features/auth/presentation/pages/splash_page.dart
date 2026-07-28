@@ -6,6 +6,8 @@ import 'package:jwt_decode/jwt_decode.dart';
 import '../../../../injection_container.dart';
 import '../../../../core/routes/app_router.dart';
 import '../../../../core/services/notification_service.dart';
+import '../../../../core/services/token_service.dart';
+import '../../../../core/utils/image_asset.dart';
 
 // ─── Palette Yobante Boutique ───────────────────────────────────────────────────
 class _C {
@@ -122,6 +124,11 @@ class _SplashPageState extends State<SplashPage> with TickerProviderStateMixin {
       } catch (e) {
         debugPrint('Erreur décodage token: $e');
       }
+
+      // Jeton présent mais inutilisable (expiré ou illisible) : on l'efface.
+      // Le laisser en place ferait croire à une session ouverte et afficherait
+      // l'interface connectée, jusqu'au premier 401.
+      await sl<TokenService>().clearToken();
     }
 
     if (!mounted) return;
@@ -274,9 +281,10 @@ class _SplashPageState extends State<SplashPage> with TickerProviderStateMixin {
 
   // ── Logo Yobante Boutique (fond blanc) ─────────────────────────────────────
   Widget _buildLogo() {
-    return Image.asset(
+    return imageAsset(
+      context,
       'assets/images/Logo Yobante Boutique - fond blanc.png',
-      width: 250,
+      largeur: 250,
       fit: BoxFit.contain,
     );
   }

@@ -1,12 +1,10 @@
 import 'package:dio/dio.dart';
-import '../../../../core/routes/app_router.dart';
 import '../models/produit_model.dart';
 import '../models/boutique_model.dart';
 import '../models/rayon_model.dart';
 import '../../../../features/promotions/data/models/promo_groupee_model.dart';
 import '../../../../core/services/token_service.dart';
 import '../../../../injection_container.dart';
-import '../../../../core/connection/auth_interceptor.dart';
 import '../../../../core/utils/app_logger.dart';
 import '../../../../core/constants/api_endpoints.dart';
 
@@ -38,6 +36,14 @@ abstract class ProduitRemoteDataSource {
       {String? sousRayonId, String? search, int page = 1, int limit = 20});
   Future<List<dynamic>> getProduitsDuSousRayon(String sousRayonId,
       {String? search, int page = 1, int limit = 20});
+
+  /// Produits proches de [produit], pour la fiche détail.
+  ///
+  /// On reste dans le sous-rayon quand il est renseigné : c'est le voisinage le
+  /// plus pertinent. À défaut on élargit au rayon, et en dernier recours on
+  /// prend les recommandations du backend (fondées sur la catégorie).
+  Future<List<ProduitModel>> getProduitsSimilaires(ProduitModel produit,
+      {int limit = 12});
   // Promotions groupées
   Future<PromoGroupeeModel> getPromotionsGroupees();
   // Bannières
@@ -52,24 +58,16 @@ class ProduitRemoteDataSourceImpl implements ProduitRemoteDataSource {
   // ─────────────────────────────────────────────
   // 🔐 Gestion centralisée erreur token
   // ─────────────────────────────────────────────
+  /// Trace une erreur d'authentification, sans toucher à la navigation.
+  ///
+  /// Ces endpoints alimentent la boutique, que l'on parcourt sans compte : un
+  /// 401 y est banal et ne doit pas éjecter l'utilisateur de son écran. La fin
+  /// de session est traitée à un seul endroit, l'intercepteur du Dio partagé
+  /// (voir [ErrorHandlerService]), qui sait distinguer un visiteur d'une
+  /// session réellement expirée.
   void _handleAuthError(dynamic e) {
-    if (e is DioException) {
-      final data = e.response?.data;
-
-      if (data is Map && data['message'] == 'Token expiré') {
-        AuthInterceptor.navigatorKey.currentState?.pushNamedAndRemoveUntil(
-          AppRouter.loginRoute,
-              (route) => false,
-        );
-      }
-
-      // Bonus : gérer aussi 401
-      if (e.response?.statusCode == 401) {
-        AuthInterceptor.navigatorKey.currentState?.pushNamedAndRemoveUntil(
-          AppRouter.loginRoute,
-              (route) => false,
-        );
-      }
+    if (e is DioException && e.response?.statusCode == 401) {
+      logDebug('🔒 401 sur ${e.requestOptions.path}');
     }
   }
 
@@ -434,6 +432,60 @@ class ProduitRemoteDataSourceImpl implements ProduitRemoteDataSource {
         options: await _getOptions(),
       );
       return _extractList(response.data);
+    } catch (e) {
+      _handleAuthError(e);
+      rethrow;
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // 🧩 Produits similaires (fiche détail)
+  // ─────────────────────────────────────────────
+  @override
+  Future<List<ProduitModel>> getProduitsSimilaires(
+    ProduitModel produit, {
+    int limit = 12,
+  }) async {
+    // On demande un article de plus que nécessaire : le produit consulté fait
+    // partie de son propre sous-rayon et sera retiré de la liste.
+    final aDemander = limit + 1;
+
+    Future<List<ProduitModel>> parser(Future<List<dynamic>> requete) async {
+      final brut = await requete;
+      return brut
+          .map((e) => ProduitModel.fromJson(e as Map<String, dynamic>))
+          .where((p) => p.id != produit.id)
+          .take(limit)
+          .toList();
+    }
+
+    try {
+      if (produit.sousRayonId.isNotEmpty) {
+        final liste = await parser(
+          getProduitsDuSousRayon(produit.sousRayonId, limit: aDemander),
+        );
+        if (liste.isNotEmpty) return liste;
+      }
+
+      if (produit.rayonId.isNotEmpty) {
+        final liste = await parser(
+          getProduitsDuRayon(produit.rayonId, limit: aDemander),
+        );
+        if (liste.isNotEmpty) return liste;
+      }
+
+      // Produit hors catalogue rayonné : on retombe sur les recommandations
+      // du backend, calculées à partir de la catégorie.
+      final response = await dio.get(
+        ProduitEndpoints.produitsRecommandes(produit.id),
+        queryParameters: {'limit': aDemander},
+        options: await _getOptions(),
+      );
+      return _extractList(response.data)
+          .map((e) => ProduitModel.fromJson(e as Map<String, dynamic>))
+          .where((p) => p.id != produit.id)
+          .take(limit)
+          .toList();
     } catch (e) {
       _handleAuthError(e);
       rethrow;

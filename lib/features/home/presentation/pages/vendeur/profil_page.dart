@@ -18,6 +18,7 @@ import '../../../../notifications/presentation/pages/notifications_page.dart';
 import '../../../../messagerie/presentation/pages/conversations_page.dart';
 import '../../../../vendeur/domain/usecases/get_vendeur_tableau_bord.dart';
 import '../../../../vendeur/presentation/widgets/statut_chip.dart';
+import '../../../../auth/presentation/deconnexion.dart';
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
 class _C {
@@ -190,10 +191,7 @@ class _ProfilPageState extends State<ProfilPage>
                 ElevatedButton(
                   onPressed: () {
                     Navigator.pop(context);
-                    context.read<AuthBloc>().add(LogoutRequested());
-                    Navigator.of(context).pushNamedAndRemoveUntil(
-                      AppRouter.loginRoute, (_) => false,
-                    );
+                    deconnecterEtRetournerBoutique(context);
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: VendeurCouleurs.rouge,
@@ -242,10 +240,9 @@ class _ProfilPageState extends State<ProfilPage>
         if (state is CompteLoaded) {
           setState(() => _liveUser = state.user);
         } else if (state is CompteAccountDeleted) {
-          context.read<AuthBloc>().add(LogoutRequested());
-          Navigator.of(context).pushNamedAndRemoveUntil(
-            AppRouter.loginRoute, (_) => false,
-          );
+          // Le compte n'existe plus : il n'y a rien à quoi se reconnecter, on
+          // rouvre la boutique en visiteur.
+          deconnecterEtRetournerBoutique(context);
         } else if (state is CompteError) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text(state.message)),

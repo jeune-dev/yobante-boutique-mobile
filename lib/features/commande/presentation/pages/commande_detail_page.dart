@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../../injection_container.dart';
 import '../../../../core/widgets/app_message.dart';
@@ -19,65 +20,17 @@ class CommandeDetailArgs {
 
 class _C {
   static const green = Color(0xFF163A9E);
+  static const greenLight = Color(0xFFEAEEF9);
   static const black = Color(0xFF1A1A1A);
   static const white = Color(0xFFFFFFFF);
   static const bg = Color(0xFFF5F7FB);
   static const sub = Color(0xFF6B7280);
+  static const label = Color(0xFF9AA3B2);
   static const border = Color(0xFFDDE3EF);
 }
 
-// Ordre du suivi (hors annulation)
-const _ordreStatuts = [
-  'en_attente',
-  'confirmee',
-  'en_preparation',
-  'prete',
-  'en_livraison',
-  'livree',
-];
-
-// Statut suivant possible pour le vendeur (simplifié)
-const Map<String, String> _statutSuivant = {
-  'confirmee': 'en_preparation',
-  'en_preparation': 'prete',
-  'prete': 'en_livraison',
-  'en_livraison': 'livree',
-};
-
-class CommandeDetailPage extends StatefulWidget {
+class CommandeDetailPage extends StatelessWidget {
   const CommandeDetailPage({super.key});
-
-  @override
-  State<CommandeDetailPage> createState() => _CommandeDetailPageState();
-}
-
-class _CommandeDetailPageState extends State<CommandeDetailPage> {
-  Timer? _pollingTimer;
-  late String _commandeId;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final args =
-        ModalRoute.of(context)?.settings.arguments as CommandeDetailArgs?;
-    _commandeId = args?.commande.id ?? '';
-    _startPolling();
-  }
-
-  void _startPolling() {
-    // Recharger la commande toutes les 15 secondes pour les mises à jour en temps réel
-    _pollingTimer = Timer.periodic(const Duration(seconds: 15), (_) {
-      if (mounted && _commandeId.isNotEmpty) {
-        context.read<CommandeBloc>().add(LoadMesCommandes());
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _pollingTimer?.cancel();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -101,9 +54,45 @@ class _DetailViewState extends State<_DetailView> {
   late CommandeModel commande = widget.args.commande;
   bool get isVendeur => widget.args.isVendeur;
 
-  /// Le mode de règlement a été fixé à la commande : relancer le paiement
-  /// reprend simplement là où il s'était arrêté.
+  Timer? _rafraichissement;
+
+  /// Un règlement déjà lancé ne doit pas repartir sur un second appui : le
+  /// bouton restait actif pendant la requête et déclenchait deux paiements.
+  bool _paiementEnCours = false;
+
+  @override
+  void initState() {
+    super.initState();
+
+    // La commande vient de la liste, qui n'embarque ni l'adresse ni le
+    // règlement : on va chercher la fiche complète tout de suite, sinon ces
+    // deux blocs restent vides jusqu'au premier rafraîchissement.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _recharger());
+
+    // Le suivi est piloté par l'administration : on redemande la commande
+    // régulièrement pour refléter l'avancement sans action du client.
+    // Le contexte est ici sous le BlocProvider — le lire au niveau de la page
+    // levait « Could not find the correct Provider<CommandeBloc> ».
+    _rafraichissement = Timer.periodic(
+      const Duration(seconds: 20),
+      (_) => _recharger(),
+    );
+  }
+
+  @override
+  void dispose() {
+    _rafraichissement?.cancel();
+    super.dispose();
+  }
+
+  void _recharger() {
+    if (!mounted || commande.id.isEmpty) return;
+    context.read<CommandeBloc>().add(RechargerCommande(commande.id));
+  }
+
   void _payer() {
+    if (_paiementEnCours) return;
+    setState(() => _paiementEnCours = true);
     context.read<CommandeBloc>().add(PayerCommande(commande.id));
   }
 
@@ -114,14 +103,9 @@ class _DetailViewState extends State<_DetailView> {
   @override
   Widget build(BuildContext context) {
     final couleur = couleurStatutCommande(commande.statut);
-    final annulable = !isVendeur &&
-        ['en_attente', 'confirmee', 'en_preparation'].contains(commande.statut);
-    final payable = !isVendeur &&
-        commande.statutPaiement == 'non_paye' &&
-        commande.modePaiement == 'en_ligne' &&
-        commande.statut != 'annulee';
-    final statutSuivant = _statutSuivant[commande.statut];
-    final retournable = !isVendeur && commande.statut == 'livree';
+    final annulable = !isVendeur && commande.statut == 'en_attente';
+    // Rien à régler dans l'application quand le client paie au livreur.
+    final payable = !isVendeur && commande.resteAPayer;
 
     return Scaffold(
       backgroundColor: _C.bg,
@@ -129,30 +113,32 @@ class _DetailViewState extends State<_DetailView> {
         backgroundColor: _C.white,
         elevation: 0.5,
         foregroundColor: _C.black,
-        title: Text(commande.referenceCommande),
+        title: Text(
+          commande.reference.isEmpty ? 'Commande' : commande.reference,
+          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+        ),
       ),
       body: BlocConsumer<CommandeBloc, CommandeState>(
         listener: (context, state) async {
           if (state is CommandeError) {
+            setState(() => _paiementEnCours = false);
             AppMessage.error(context, state.message);
           } else if (state is CommandeMiseAJour) {
-            setState(() => commande = state.commande);
-            AppMessage.success(context, 'Commande mise à jour');
+            setState(() {
+              commande = state.commande;
+              _paiementEnCours = false;
+            });
           } else if (state is PaiementInitie) {
+            setState(() => _paiementEnCours = false);
             final url = state.paiement.urlPaiement;
             if (url != null && url.isNotEmpty) {
               final uri = Uri.tryParse(url);
               if (uri != null) {
                 await launchUrl(uri, mode: LaunchMode.externalApplication);
               }
-              // Au retour de la page du fournisseur, c'est le serveur qui fait
-              // foi sur l'issue du règlement.
-              if (context.mounted) {
-                context.read<CommandeBloc>().add(VerifierPaiement(commande.id));
-              }
+              // Au retour du fournisseur, c'est le serveur qui fait foi.
+              if (context.mounted) _recharger();
             }
-          } else if (state is PaiementStatut) {
-            AppMessage.info(context, 'Paiement : ${state.paiement.statutLibelle}');
           }
         },
         builder: (context, state) {
@@ -160,96 +146,39 @@ class _DetailViewState extends State<_DetailView> {
           return Stack(
             children: [
               ListView(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
                 children: [
-                  // Bandeau statut
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: couleur.withValues(alpha: 0.10),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: couleur.withValues(alpha: 0.3)),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.local_shipping_outlined, color: couleur),
-                        const SizedBox(width: 10),
-                        Text(
-                          kStatutCommandeLabels[commande.statut] ??
-                              commande.statut,
-                          style: TextStyle(
-                              color: couleur, fontWeight: FontWeight.w800),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Affichage du motif de rejet
+                  _bandeauStatut(couleur),
                   if (commande.statut == 'rejetee' &&
-                      commande.motifRejet != null)
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFEE2E2),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: const Color(0xFFFECACA),
-                        ),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.info_outline,
-                                color: Colors.red.shade700,
-                                size: 20,
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                'Motif du rejet',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w800,
-                                  color: Colors.red.shade700,
-                                  fontSize: 14,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            commande.motifRejet!,
-                            style: TextStyle(
-                              color: Colors.red.shade900,
-                              fontSize: 13,
-                              height: 1.5,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  if (commande.statut == 'rejetee')
-                    const SizedBox(height: 16),
-
-                  // Suivi (timeline) si non annulée et non rejetée
-                  if (commande.statut != 'annulee' && commande.statut != 'rejetee')
-                    _timeline(),
-
-                  const SizedBox(height: 16),
-                  _carte('Articles', _articles()),
+                      (commande.motifRejet ?? '').isNotEmpty) ...[
+                    const SizedBox(height: 14),
+                    _motifRejet(),
+                  ],
+                  if (commande.statut != 'annulee' &&
+                      commande.statut != 'rejetee') ...[
+                    const SizedBox(height: 14),
+                    _carte('Suivi', _timeline()),
+                  ],
+                  const SizedBox(height: 12),
+                  _carte('Livraison', _livraison()),
+                  const SizedBox(height: 12),
+                  _carte('Articles (${commande.nombreArticles})', _articles()),
                   const SizedBox(height: 12),
                   _carte('Récapitulatif', _recap()),
                   const SizedBox(height: 12),
-                  _carte('Livraison', _livraison()),
-                  const SizedBox(height: 90),
+                  _carte('Règlement', _reglement()),
+                  if ((commande.note ?? '').isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    _carte('Votre note', Text(commande.note!,
+                        style: const TextStyle(color: _C.sub, height: 1.5))),
+                  ],
+                  const SizedBox(height: 20),
                 ],
               ),
               if (loading)
                 const Positioned.fill(
                   child: ColoredBox(
-                    color: Color(0x33000000),
+                    color: Color(0x22000000),
                     child: Center(child: CircularProgressIndicator()),
                   ),
                 ),
@@ -257,28 +186,266 @@ class _DetailViewState extends State<_DetailView> {
           );
         },
       ),
-      bottomNavigationBar: _actions(
-        payable: payable,
-        annulable: annulable,
-        statutSuivant: statutSuivant,
-        retournable: retournable,
+      bottomNavigationBar: _actions(payable: payable, annulable: annulable),
+    );
+  }
+
+  // ── Bandeau de statut ──────────────────────────────────────────────────────
+  Widget _bandeauStatut(Color couleur) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: couleur.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: couleur.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.local_shipping_outlined, color: couleur),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  kStatutCommandeLabels[commande.statut] ?? commande.statut,
+                  style:
+                      TextStyle(color: couleur, fontWeight: FontWeight.w800, fontSize: 15),
+                ),
+                if (commande.createdAt != null)
+                  Text(
+                    'Commandée le ${DateFormat('d MMMM yyyy à HH:mm', 'fr_FR').format(commande.createdAt!)}',
+                    style: const TextStyle(color: _C.sub, fontSize: 12),
+                  ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget? _actions(
-      {required bool payable,
-      required bool annulable,
-      required String? statutSuivant,
-      required bool retournable}) {
+  Widget _motifRejet() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFEE2E2),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFFECACA)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.info_outline, color: Colors.red.shade700, size: 20),
+              const SizedBox(width: 8),
+              Text('Motif du rejet',
+                  style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                      color: Colors.red.shade700,
+                      fontSize: 14)),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(commande.motifRejet!,
+              style: TextStyle(
+                  color: Colors.red.shade900, fontSize: 13, height: 1.5)),
+        ],
+      ),
+    );
+  }
+
+  // ── Suivi ──────────────────────────────────────────────────────────────────
+  Widget _timeline() {
+    final idx = kSuiviCommande.indexOf(commande.statut);
+    return Column(
+      children: List.generate(kSuiviCommande.length, (i) {
+        final fait = idx >= 0 && i <= idx;
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Column(
+              children: [
+                Container(
+                  width: 18,
+                  height: 18,
+                  decoration: BoxDecoration(
+                    color: fait ? _C.green : _C.bg,
+                    shape: BoxShape.circle,
+                    border:
+                        Border.all(color: fait ? _C.green : _C.border, width: 2),
+                  ),
+                  child: fait
+                      ? const Icon(Icons.check, size: 11, color: Colors.white)
+                      : null,
+                ),
+                if (i < kSuiviCommande.length - 1)
+                  Container(
+                      width: 2, height: 22, color: fait ? _C.green : _C.border),
+              ],
+            ),
+            const SizedBox(width: 12),
+            Padding(
+              padding: const EdgeInsets.only(top: 1),
+              child: Text(
+                kStatutCommandeLabels[kSuiviCommande[i]] ?? kSuiviCommande[i],
+                style: TextStyle(
+                    color: fait ? _C.black : _C.sub,
+                    fontWeight: fait ? FontWeight.w700 : FontWeight.w400),
+              ),
+            ),
+          ],
+        );
+      }),
+    );
+  }
+
+  // ── Livraison ──────────────────────────────────────────────────────────────
+  Widget _livraison() {
+    final adresse = commande.adresse;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (adresse == null)
+          const Text('Adresse non communiquée',
+              style: TextStyle(color: _C.sub, fontSize: 13))
+        else ...[
+          _info('Destinataire', adresse.nomComplet),
+          if (adresse.telephone.isNotEmpty)
+            _info('Téléphone', adresse.telephone, action: () => _appeler(adresse.telephone)),
+          _info('Adresse', adresse.adresseComplete),
+        ],
+        _info(
+          'Livraison souhaitée',
+          commande.dateLivraisonSouhaitee == null
+              ? 'Au plus tôt'
+              : DateFormat('EEEE d MMMM yyyy', 'fr_FR')
+                  .format(commande.dateLivraisonSouhaitee!),
+        ),
+        _info('Frais de livraison',
+            '${commande.fraisLivraison.toStringAsFixed(0)} FCFA'),
+      ],
+    );
+  }
+
+  Future<void> _appeler(String numero) async {
+    final uri = Uri.parse('tel:$numero');
+    if (await canLaunchUrl(uri)) await launchUrl(uri);
+  }
+
+  // ── Articles ───────────────────────────────────────────────────────────────
+  Widget _articles() {
+    if (commande.lignes.isEmpty) {
+      return const Text('Aucun article', style: TextStyle(color: _C.sub));
+    }
+    return Column(
+      children: commande.lignes.map((l) {
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 7),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(l.nomProduit,
+                        style: const TextStyle(
+                            color: _C.black, fontWeight: FontWeight.w600)),
+                    Text(
+                      '${l.quantite} × ${l.prixUnitaire.toStringAsFixed(0)} FCFA',
+                      style: const TextStyle(color: _C.sub, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              Text('${l.sousTotal.toStringAsFixed(0)} FCFA',
+                  style: const TextStyle(fontWeight: FontWeight.w700)),
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  // ── Récapitulatif ──────────────────────────────────────────────────────────
+  Widget _recap() {
+    Widget ligne(String l, String v, {bool fort = false}) => Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(l, style: const TextStyle(color: _C.sub)),
+              Text(v,
+                  style: TextStyle(
+                      fontWeight: fort ? FontWeight.w800 : FontWeight.w600,
+                      fontSize: fort ? 16 : 14,
+                      color: fort ? _C.green : _C.black)),
+            ],
+          ),
+        );
+    return Column(
+      children: [
+        ligne('Articles', '${commande.montantProduits.toStringAsFixed(0)} FCFA'),
+        ligne('Livraison', '${commande.fraisLivraison.toStringAsFixed(0)} FCFA'),
+        const Divider(color: _C.border),
+        ligne('Total', '${commande.montantTotal.toStringAsFixed(0)} FCFA',
+            fort: true),
+      ],
+    );
+  }
+
+  // ── Règlement ──────────────────────────────────────────────────────────────
+  Widget _reglement() {
+    final paiement = commande.paiement;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _info('Mode', paiement?.methodeLibelle ?? 'À la livraison'),
+        _info('État', paiement?.statutLibelle ?? 'En attente'),
+        if (paiement?.payeAt != null)
+          _info('Réglée le',
+              DateFormat('d MMMM yyyy à HH:mm', 'fr_FR').format(paiement!.payeAt!)),
+        if (commande.paiementALaLivraison) ...[
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: _C.greenLight,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.info_outline, size: 17, color: _C.green),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Vous réglerez directement au livreur : rien à payer ici.',
+                    style: TextStyle(fontSize: 12, color: _C.black, height: 1.3),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  // ── Actions ────────────────────────────────────────────────────────────────
+  Widget? _actions({required bool payable, required bool annulable}) {
     final boutons = <Widget>[];
 
     if (payable) {
       boutons.add(Expanded(
         child: ElevatedButton(
-          onPressed: _payer,
+          onPressed: _paiementEnCours ? null : _payer,
           style: ElevatedButton.styleFrom(
-              backgroundColor: _C.green, foregroundColor: _C.white),
+              backgroundColor: _C.green,
+              foregroundColor: _C.white,
+              disabledBackgroundColor: _C.border,
+              padding: const EdgeInsets.symmetric(vertical: 14)),
           child: const Text('Payer maintenant'),
         ),
       ));
@@ -287,17 +454,17 @@ class _DetailViewState extends State<_DetailView> {
       boutons.add(Expanded(
         child: OutlinedButton(
           onPressed: _annuler,
-          style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
-          child: const Text('Annuler'),
+          style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.red,
+              padding: const EdgeInsets.symmetric(vertical: 14)),
+          child: const Text('Annuler la commande'),
         ),
       ));
     }
-    // Ni avancement de statut ni demande de retour : le backend n'expose
-    // aucune de ces deux actions. Le statut est piloté par l'administration.
 
     if (boutons.isEmpty) return null;
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 20),
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
       color: _C.white,
       child: SafeArea(
         top: false,
@@ -313,126 +480,31 @@ class _DetailViewState extends State<_DetailView> {
     );
   }
 
-  Widget _timeline() {
-    final idx = _ordreStatuts.indexOf(commande.statut);
-    return _carte(
-      'Suivi',
-      Column(
-        children: List.generate(_ordreStatuts.length, (i) {
-          final fait = i <= idx;
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Column(
-                children: [
-                  Container(
-                    width: 18,
-                    height: 18,
-                    decoration: BoxDecoration(
-                      color: fait ? _C.green : _C.bg,
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                          color: fait ? _C.green : _C.border, width: 2),
-                    ),
-                    child: fait
-                        ? const Icon(Icons.check, size: 11, color: Colors.white)
-                        : null,
-                  ),
-                  if (i < _ordreStatuts.length - 1)
-                    Container(
-                        width: 2,
-                        height: 22,
-                        color: fait ? _C.green : _C.border),
-                ],
-              ),
-              const SizedBox(width: 12),
-              Padding(
-                padding: const EdgeInsets.only(top: 1),
-                child: Text(
-                  kStatutCommandeLabels[_ordreStatuts[i]] ?? _ordreStatuts[i],
-                  style: TextStyle(
-                      color: fait ? _C.black : _C.sub,
-                      fontWeight: fait ? FontWeight.w700 : FontWeight.w400),
-                ),
-              ),
-            ],
-          );
-        }),
-      ),
-    );
-  }
-
-  Widget _articles() {
-    return Column(
-      children: commande.lignes.map((l) {
-        return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text('${l.nomProduit}  ×${l.quantite}',
-                    style: const TextStyle(color: _C.black)),
-              ),
-              Text('${l.sousTotal.toStringAsFixed(0)} FCFA',
-                  style: const TextStyle(fontWeight: FontWeight.w700)),
-            ],
-          ),
-        );
-      }).toList(),
-    );
-  }
-
-  Widget _recap() {
-    Widget ligne(String l, String v, {bool fort = false}) => Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(l, style: const TextStyle(color: _C.sub)),
-              Text(v,
-                  style: TextStyle(
-                      fontWeight: fort ? FontWeight.w800 : FontWeight.w600,
-                      color: fort ? _C.green : _C.black)),
-            ],
-          ),
-        );
-    return Column(
-      children: [
-        ligne('Produits', '${commande.montantProduits.toStringAsFixed(0)} FCFA'),
-        ligne('Livraison', '${commande.fraisLivraison.toStringAsFixed(0)} FCFA'),
-        const Divider(),
-        ligne('Total', '${commande.montantTotal.toStringAsFixed(0)} FCFA',
-            fort: true),
-      ],
-    );
-  }
-
-  Widget _livraison() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _info('Mode', commande.modeLivraison == 'retrait' ? 'Retrait' : 'Livraison'),
-        if (commande.adresseLivraison != null &&
-            commande.adresseLivraison!.isNotEmpty)
-          _info('Adresse', commande.adresseLivraison!),
-        if (commande.numeroTelephone != null)
-          _info('Téléphone', commande.numeroTelephone!),
-        _info(
-            isVendeur ? 'Client' : 'Vendeur',
-            (isVendeur ? commande.acheteurNom : commande.vendeurNom) ?? '—'),
-        if (commande.note != null && commande.note!.isNotEmpty)
-          _info('Note', commande.note!),
-      ],
-    );
-  }
-
-  Widget _info(String l, String v) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 3),
+  Widget _info(String l, String v, {VoidCallback? action}) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SizedBox(width: 90, child: Text(l, style: const TextStyle(color: _C.sub))),
-            Expanded(child: Text(v, style: const TextStyle(color: _C.black))),
+            SizedBox(
+                width: 120,
+                child: Text(l,
+                    style: const TextStyle(color: _C.label, fontSize: 12.5))),
+            Expanded(
+              child: action == null
+                  ? Text(v,
+                      style: const TextStyle(
+                          color: _C.black,
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w600))
+                  : GestureDetector(
+                      onTap: action,
+                      child: Text(v,
+                          style: const TextStyle(
+                              color: _C.green,
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w700)),
+                    ),
+            ),
           ],
         ),
       );

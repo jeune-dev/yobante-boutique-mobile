@@ -4,9 +4,12 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:yobante/features/promotions/presentation/pages/section_promotions_page.dart';
 import '../../../../promotions/data/models/bloc_promo_model.dart';
 import '../../../../../core/utils/image_cloudinary.dart';
+import '../../../../../core/widgets/barre_boutique.dart';
 import 'package:yobante/injection_container.dart';
 import '../../../../promotions/data/datasources/promotions_remote_datasource.dart';
 import '../../../../promotions/data/models/promotion_model.dart';
+import '../../../../promotions/presentation/widgets/promotion_card.dart';
+import '../../widgets/produit_card.dart';
 
 class _C {
   static const green = Color(0xFF163A9E);
@@ -17,6 +20,8 @@ class _C {
   static const border = Color(0xFFDDE3EF);
 }
 
+/// Sous-sections d'une section de l'accueil, ou directement ses promotions
+/// quand l'administration n'en a défini aucune.
 class BlocsSectionPage extends StatefulWidget {
   final String section;
   final String titre;
@@ -37,12 +42,21 @@ class _BlocsSectionPageState extends State<BlocsSectionPage> {
   List<PromotionModel> _promotions = [];
   bool _chargement = false;
 
+  final _recherche = TextEditingController();
+  String _filtre = '';
+
   @override
   void initState() {
     super.initState();
     if (widget.blocs.isEmpty) {
       _chargerPromotions();
     }
+  }
+
+  @override
+  void dispose() {
+    _recherche.dispose();
+    super.dispose();
   }
 
   Future<void> _chargerPromotions() async {
@@ -56,78 +70,84 @@ class _BlocsSectionPageState extends State<BlocsSectionPage> {
     }
   }
 
+  /// Filtrage local, sur le libellé des sous-sections ou des promotions.
+  bool _correspond(String libelle) =>
+      _filtre.isEmpty || libelle.toLowerCase().contains(_filtre.toLowerCase());
+
   @override
   Widget build(BuildContext context) {
-    if (widget.blocs.isEmpty) {
-      return _buildPromotionsPage();
-    }
-    return _buildBlocsPage();
-  }
-
-  Widget _buildBlocsPage() {
     return Scaffold(
       backgroundColor: _C.bg,
-      appBar: AppBar(
-        backgroundColor: _C.white,
-        elevation: 0.5,
-        foregroundColor: _C.black,
-        title: Text(
-          widget.titre,
-          style: GoogleFonts.sora(
-            fontSize: 17,
-            fontWeight: FontWeight.w800,
-            color: _C.black,
-          ),
-        ),
+      appBar: BarreBoutique(
+        controleurRecherche: _recherche,
+        onRecherche: (valeur) => setState(() => _filtre = valeur.trim()),
+        indication: 'Rechercher dans ${widget.titre}',
       ),
-      body: ListView.separated(
-        padding: const EdgeInsets.all(16),
-        itemCount: widget.blocs.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 12),
-        itemBuilder: (context, i) => _blocCard(context, widget.blocs[i]),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+            child: Text(
+              widget.titre,
+              style: GoogleFonts.sora(
+                fontSize: 17,
+                fontWeight: FontWeight.w800,
+                color: _C.black,
+              ),
+            ),
+          ),
+          Expanded(
+            child: widget.blocs.isEmpty ? _corpsPromotions() : _corpsBlocs(),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildPromotionsPage() {
-    return Scaffold(
-      backgroundColor: _C.bg,
-      appBar: AppBar(
-        backgroundColor: _C.white,
-        elevation: 0.5,
-        foregroundColor: _C.black,
-        title: Text(
-          widget.titre,
-          style: GoogleFonts.sora(
-            fontSize: 17,
-            fontWeight: FontWeight.w800,
-            color: _C.black,
+  Widget _corpsBlocs() {
+    final blocs = widget.blocs
+        .where((b) => _correspond(b.titre ?? ''))
+        .toList();
+    if (blocs.isEmpty) return _vide('Aucune sous-section');
+    return ListView.separated(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+      itemCount: blocs.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      itemBuilder: (context, i) => _blocCard(context, blocs[i]),
+    );
+  }
+
+  Widget _corpsPromotions() {
+    if (_chargement) {
+      return const Center(child: CircularProgressIndicator(color: _C.green));
+    }
+    final promotions =
+        _promotions.where((p) => _correspond(p.libelle)).toList();
+    if (promotions.isEmpty) return _vide('Aucune promotion disponible');
+
+    return GridView.builder(
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
+      gridDelegate: grilleProduits,
+      itemCount: promotions.length,
+      itemBuilder: (_, i) => PromotionCard(promotion: promotions[i]),
+    );
+  }
+
+  Widget _vide(String message) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.local_offer_outlined, size: 30, color: _C.sub),
+          const SizedBox(height: 10),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: GoogleFonts.dmSans(color: _C.sub, fontSize: 13.5),
           ),
-        ),
+        ],
       ),
-      body: _chargement
-          ? const Center(child: CircularProgressIndicator())
-          : _promotions.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.local_offer_outlined, size: 30, color: _C.sub),
-                      const SizedBox(height: 10),
-                      Text(
-                        'Aucune promotion disponible',
-                        textAlign: TextAlign.center,
-                        style: GoogleFonts.dmSans(color: _C.sub, fontSize: 13.5),
-                      ),
-                    ],
-                  ),
-                )
-              : ListView.separated(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: _promotions.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 12),
-                  itemBuilder: (context, i) => _promotionCard(context, _promotions[i]),
-                ),
     );
   }
 
@@ -146,68 +166,53 @@ class _BlocsSectionPageState extends State<BlocsSectionPage> {
         ),
       ),
       child: Container(
+        clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
           color: _C.white,
           borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.08),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            )
-          ],
+          border: Border.all(color: _C.border),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            ClipRRect(
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(16),
-                topRight: Radius.circular(16),
-              ),
-              child: bloc.image?.isNotEmpty == true
-                  ? CachedNetworkImage(
-                      imageUrl: imageOptimisee(
-                        bloc.image!,
-                        largeur: MediaQuery.of(context).size.width.round(),
-                      ),
-                      width: double.infinity,
-                      height: 180,
-                      fit: BoxFit.cover,
-                      placeholder: (_, __) => Container(
-                        height: 180,
-                        color: _C.bg,
-                        child: const Icon(Icons.image_not_supported_outlined,
-                            color: _C.sub),
-                      ),
-                    )
-                  : Container(
-                      width: double.infinity,
-                      height: 180,
+            // Comme les bannières de section : hauteur libre, l'image garde
+            // ses proportions et n'est pas rognée.
+            bloc.image?.isNotEmpty == true
+                ? CachedNetworkImage(
+                    imageUrl: imageOptimisee(
+                      bloc.image!,
+                      largeur: MediaQuery.of(context).size.width.round(),
+                    ),
+                    width: double.infinity,
+                    fit: BoxFit.fitWidth,
+                    placeholder: (_, __) => Container(
+                      height: 160,
                       color: _C.bg,
                       child: const Icon(Icons.image_not_supported_outlined,
-                          color: _C.sub, size: 40),
+                          color: _C.sub),
                     ),
-            ),
+                  )
+                : Container(
+                    width: double.infinity,
+                    height: 160,
+                    color: _C.bg,
+                    child: const Icon(Icons.image_not_supported_outlined,
+                        color: _C.sub, size: 40),
+                  ),
             Padding(
               padding: const EdgeInsets.all(14),
               child: Row(
                 children: [
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          bloc.titre ?? 'Bloc promotion',
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.dmSans(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 15,
-                            color: _C.black,
-                          ),
-                        ),
-                      ],
+                    child: Text(
+                      bloc.titre ?? 'Bloc promotion',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.dmSans(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                        color: _C.black,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -226,136 +231,6 @@ class _BlocsSectionPageState extends State<BlocsSectionPage> {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _promotionCard(BuildContext context, PromotionModel promo) {
-    return Container(
-      decoration: BoxDecoration(
-        color: _C.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          )
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Stack(
-            children: [
-              ClipRRect(
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(16),
-                  topRight: Radius.circular(16),
-                ),
-                child: promo.image.isNotEmpty
-                    ? CachedNetworkImage(
-                        imageUrl: imageOptimisee(
-                          promo.image,
-                          largeur: MediaQuery.of(context).size.width.round(),
-                        ),
-                        width: double.infinity,
-                        height: 180,
-                        fit: BoxFit.cover,
-                        placeholder: (_, __) => Container(
-                          height: 180,
-                          color: _C.bg,
-                          child: const Icon(Icons.image_not_supported_outlined,
-                              color: _C.sub),
-                        ),
-                      )
-                    : Container(
-                        width: double.infinity,
-                        height: 180,
-                        color: _C.bg,
-                        child: const Icon(Icons.image_not_supported_outlined,
-                            color: _C.sub, size: 40),
-                      ),
-              ),
-              if (promo.pourcentageReduction > 0)
-                Positioned(
-                  top: 12,
-                  right: 12,
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFE53E3E),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      '-${promo.pourcentageReduction.toStringAsFixed(0)}%',
-                      style: const TextStyle(
-                        color: _C.white,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  promo.libelle,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.dmSans(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 15,
-                    color: _C.black,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                if ((promo.description ?? '').isNotEmpty)
-                  Text(
-                    promo.description ?? '',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.dmSans(
-                      fontSize: 12,
-                      color: _C.sub,
-                      height: 1.4,
-                    ),
-                  ),
-                if ((promo.description ?? '').isNotEmpty)
-                  const SizedBox(height: 8),
-                Row(
-                  children: [
-                    if ((promo.produitPrix ?? 0.0) > 0)
-                      Text(
-                        '${(promo.produitPrix ?? 0.0).toStringAsFixed(0)} FCFA',
-                        style: GoogleFonts.dmSans(
-                          color: _C.sub,
-                          fontSize: 12,
-                          decoration: TextDecoration.lineThrough,
-                        ),
-                      ),
-                    if ((promo.produitPrix ?? 0.0) > 0)
-                      const SizedBox(width: 8),
-                    Text(
-                      '${promo.prixPromo.toStringAsFixed(0)} FCFA',
-                      style: GoogleFonts.dmSans(
-                        color: _C.green,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }

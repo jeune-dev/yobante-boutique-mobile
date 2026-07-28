@@ -14,12 +14,35 @@ class CommandeRepository {
     required String methode,
     required List<Map<String, dynamic>> items,
     String? note,
+    DateTime? dateLivraisonSouhaitee,
   }) {
     return remote.creerCommande({
       'adresseId': adresseId,
       'methode': methode,
       'items': items,
       if (note != null && note.isNotEmpty) 'note': note,
+      if (dateLivraisonSouhaitee != null)
+        'dateLivraisonSouhaitee':
+            dateLivraisonSouhaitee.toIso8601String().split('T').first,
+    });
+  }
+
+  /// Crée une adresse de livraison ponctuelle (option « livrer ailleurs »).
+  Future<AdresseModel> creerAdresse({
+    required String nomComplet,
+    required String telephone,
+    required String rue,
+    required String ville,
+    String? region,
+    String pays = 'Sénégal',
+  }) {
+    return remote.creerAdresse({
+      'nomComplet': nomComplet,
+      'telephone': telephone,
+      'rue': rue,
+      'ville': ville,
+      if (region != null && region.isNotEmpty) 'region': region,
+      'pays': pays,
     });
   }
 

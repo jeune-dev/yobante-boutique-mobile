@@ -10,20 +10,78 @@ import 'checkout_page.dart';
 
 class _C {
   static const green = Color(0xFF163A9E);
+  static const greenLight = Color(0xFFEAEEF9);
   static const black = Color(0xFF1A1A1A);
   static const white = Color(0xFFFFFFFF);
   static const bg = Color(0xFFF5F7FB);
   static const sub = Color(0xFF6B7280);
+  static const label = Color(0xFF9AA3B2);
   static const border = Color(0xFFDDE3EF);
 }
 
-class PanierPage extends StatelessWidget {
+/// Panier : tous les articles dans un même bloc, cochés à la demande.
+///
+/// Le client choisit ce qu'il commande maintenant plutôt que de tout envoyer :
+/// le total suit la sélection, et ce qui n'est pas coché reste dans le panier
+/// après la commande.
+class PanierPage extends StatefulWidget {
   const PanierPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final panier = sl<PanierService>();
+  State<PanierPage> createState() => _PanierPageState();
+}
 
+class _PanierPageState extends State<PanierPage> {
+  final _panier = sl<PanierService>();
+
+  /// Produits cochés. Tout est sélectionné à l'ouverture : commander la
+  /// totalité reste le cas courant, décocher est l'exception.
+  late Set<String> _selection = _panier.items.map((e) => e.produitId).toSet();
+
+  @override
+  void initState() {
+    super.initState();
+    _panier.addListener(_synchroniser);
+  }
+
+  @override
+  void dispose() {
+    _panier.removeListener(_synchroniser);
+    super.dispose();
+  }
+
+  /// Écarte de la sélection les articles qui ont quitté le panier.
+  void _synchroniser() {
+    final presents = _panier.items.map((e) => e.produitId).toSet();
+    final nettoyee = _selection.intersection(presents);
+    if (nettoyee.length != _selection.length && mounted) {
+      setState(() => _selection = nettoyee);
+    }
+  }
+
+  bool get _toutSelectionne =>
+      _panier.items.isNotEmpty && _selection.length == _panier.items.length;
+
+  void _basculerTout(bool? valeur) {
+    setState(() {
+      _selection = valeur == true
+          ? _panier.items.map((e) => e.produitId).toSet()
+          : <String>{};
+    });
+  }
+
+  void _basculer(String produitId, bool? valeur) {
+    setState(() {
+      if (valeur == true) {
+        _selection.add(produitId);
+      } else {
+        _selection.remove(produitId);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _C.bg,
       appBar: AppBar(
@@ -31,199 +89,291 @@ class PanierPage extends StatelessWidget {
         elevation: 0.5,
         foregroundColor: _C.black,
         centerTitle: true,
-        title: Text('Panier',
-            style: GoogleFonts.sora(
-                fontSize: 18, fontWeight: FontWeight.w800, color: _C.black)),
+        title: Text(
+          'Panier',
+          style: GoogleFonts.sora(
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
+            color: _C.black,
+          ),
+        ),
       ),
       body: ListenableBuilder(
-        listenable: panier,
+        listenable: _panier,
         builder: (context, _) {
-          if (panier.estVide) {
-            return const _PanierVide();
-          }
-          final groupes = panier.parVendeur;
+          if (_panier.estVide) return const _PanierVide();
           return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
-            children: [
-              for (final entry in groupes.entries)
-                _BoutiqueGroupe(
-                  nomBoutique: entry.value.first.vendeurNom.isNotEmpty
-                      ? entry.value.first.vendeurNom
-                      : 'Boutique',
-                  items: entry.value,
-                  total: panier.totalVendeur(entry.key),
-                  onMoins: (item) => panier.changerQuantite(
-                      item.produitId, item.quantite - 1),
-                  onPlus: (item) => panier.changerQuantite(
-                      item.produitId, item.quantite + 1),
-                  onCommander: () => _commander(context, entry.key),
-                ),
-            ],
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+            children: [_bloc()],
           );
         },
+      ),
+      bottomNavigationBar: ListenableBuilder(
+        listenable: _panier,
+        builder: (context, _) =>
+            _panier.estVide ? const SizedBox.shrink() : _barreCommande(),
+      ),
+    );
+  }
+
+  // ── Bloc unique contenant tous les articles ────────────────────────────────
+  Widget _bloc() {
+    final items = _panier.items;
+    return Container(
+      decoration: BoxDecoration(
+        color: _C.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: _C.border),
+      ),
+      child: Column(
+        children: [
+          _enTete(items.length),
+          const Divider(height: 1, color: _C.border),
+          for (int i = 0; i < items.length; i++) ...[
+            _ligne(items[i]),
+            if (i < items.length - 1)
+              const Divider(
+                height: 1,
+                indent: 14,
+                endIndent: 14,
+                color: _C.border,
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// Case « Tout sélectionner » et décompte de la sélection.
+  Widget _enTete(int total) {
+    return InkWell(
+      onTap: () => _basculerTout(!_toutSelectionne),
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(17)),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(6, 4, 14, 4),
+        child: Row(
+          children: [
+            Checkbox(
+              value: _toutSelectionne,
+              // Sélection partielle : la case le montre plutôt que de paraître
+              // simplement décochée.
+              tristate: true,
+              onChanged: _basculerTout,
+              activeColor: _C.green,
+              shape: const CircleBorder(),
+            ),
+            Expanded(
+              child: Text(
+                'Tout sélectionner',
+                style: GoogleFonts.dmSans(
+                  fontWeight: FontWeight.w700,
+                  color: _C.black,
+                  fontSize: 14,
+                ),
+              ),
+            ),
+            Text(
+              '${_selection.length}/$total',
+              style: GoogleFonts.dmSans(color: _C.sub, fontSize: 12.5),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _ligne(PanierItem item) {
+    final coche = _selection.contains(item.produitId);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(6, 10, 12, 10),
+      child: Row(
+        children: [
+          Checkbox(
+            value: coche,
+            onChanged: (v) => _basculer(item.produitId, v),
+            activeColor: _C.green,
+            shape: const CircleBorder(),
+          ),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: item.image.isNotEmpty
+                ? CachedNetworkImage(
+                    imageUrl: item.image,
+                    width: 56,
+                    height: 56,
+                    fit: BoxFit.cover,
+                    errorWidget: (_, __, ___) => const _ImgFallback(),
+                  )
+                : const _ImgFallback(),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.nom,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.dmSans(
+                    fontWeight: FontWeight.w600,
+                    color: _C.black,
+                    fontSize: 13.5,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '${item.sousTotal.toStringAsFixed(0)} FCFA',
+                  style: GoogleFonts.sora(
+                    color: _C.green,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 14,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          _QtyStepper(
+            quantite: item.quantite,
+            onMoins: () =>
+                _panier.changerQuantite(item.produitId, item.quantite - 1),
+            onPlus: () =>
+                _panier.changerQuantite(item.produitId, item.quantite + 1),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Récapitulatif ──────────────────────────────────────────────────────────
+  /// Détail de la sélection, juste au-dessus du total.
+  Widget _recapitulatif() {
+    final articles = _panier.nombreArticlesSelection(_selection);
+    return Column(
+      children: [
+        _ligneRecap('Articles sélectionnés', '$articles'),
+        const SizedBox(height: 5),
+        _ligneRecap(
+          'Sous-total',
+          '${_panier.totalSelection(_selection).toStringAsFixed(0)} FCFA',
+        ),
+        const SizedBox(height: 5),
+        // Les frais dépendent de la ville de livraison : c'est le serveur qui
+        // les calcule, à la validation.
+        _ligneRecap('Livraison', 'calculée à la validation'),
+      ],
+    );
+  }
+
+  Widget _ligneRecap(String gauche, String droite) => Row(
+    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    children: [
+      Text(gauche, style: GoogleFonts.dmSans(color: _C.sub, fontSize: 13)),
+      Text(
+        droite,
+        style: GoogleFonts.dmSans(
+          color: _C.black,
+          fontWeight: FontWeight.w700,
+          fontSize: 13,
+        ),
+      ),
+    ],
+  );
+
+  // ── Barre de commande ──────────────────────────────────────────────────────
+  Widget _barreCommande() {
+    final total = _panier.totalSelection(_selection);
+    final rien = _selection.isEmpty;
+
+    return Container(
+      decoration: const BoxDecoration(
+        color: _C.white,
+        border: Border(top: BorderSide(color: _C.border)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
+              child: _recapitulatif(),
+            ),
+            const Divider(height: 1, color: _C.border),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Total',
+                          style: GoogleFonts.dmSans(
+                            color: _C.sub,
+                            fontSize: 12,
+                          ),
+                        ),
+                        Text(
+                          '${total.toStringAsFixed(0)} FCFA',
+                          style: GoogleFonts.sora(
+                            fontSize: 19,
+                            fontWeight: FontWeight.w800,
+                            color: _C.black,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  ElevatedButton(
+                    onPressed: rien ? null : _commander,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _C.green,
+                      foregroundColor: _C.white,
+                      disabledBackgroundColor: _C.border,
+                      disabledForegroundColor: _C.label,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 22,
+                        vertical: 14,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    child: Text(
+                      rien
+                          ? 'Commander'
+                          : 'Commander (${_panier.nombreArticlesSelection(_selection)})',
+                      style: GoogleFonts.dmSans(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   /// Validation de commande réservée aux clients connectés.
+  ///
   /// Le client peut consulter la boutique et remplir son panier librement, mais
   /// doit se connecter avant de valider (le panier est conservé pendant ce temps).
-  Future<void> _commander(BuildContext context, String vendeurId) async {
+  Future<void> _commander() async {
+    if (_selection.isEmpty) return;
     final connecte = await sl<TokenService>().isAuthenticated;
-    if (!context.mounted) return;
+    if (!mounted) return;
 
     if (!connecte) {
       _demanderConnexion(context);
       return;
     }
-
-    final panier = sl<PanierService>();
-    final items = panier.parVendeur[vendeurId] ?? [];
-    final total = panier.totalVendeur(vendeurId);
-
-    if (!context.mounted) return;
-    _afficherRecapCommande(context, vendeurId, items, total);
-  }
-
-  void _afficherRecapCommande(
-    BuildContext context,
-    String vendeurId,
-    List<PanierItem> items,
-    double total,
-  ) {
-    showModalBottomSheet(
-      context: context,
-      isDismissible: true,
-      enableDrag: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      builder: (ctx) => Container(
-        decoration: const BoxDecoration(
-          color: _C.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-        ),
-        padding: const EdgeInsets.fromLTRB(16, 24, 16, 32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // En-tête avec titre
-            Text(
-              'Confirmation de commande',
-              style: GoogleFonts.sora(
-                fontSize: 20,
-                fontWeight: FontWeight.w800,
-                color: _C.black,
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // Liste des produits
-            Container(
-              decoration: BoxDecoration(
-                color: _C.bg,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  ...items.map((item) => Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            '${item.nom} x${item.quantite}',
-                            style: GoogleFonts.dmSans(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: _C.black,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                  )),
-                  const Divider(height: 16, color: _C.border),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Total (${items.fold(0, (sum, item) => sum + item.quantite)} articles)',
-                        style: GoogleFonts.dmSans(
-                          fontSize: 14,
-                          color: _C.sub,
-                        ),
-                      ),
-                      Text(
-                        '${total.toStringAsFixed(0)} FCFA',
-                        style: GoogleFonts.sora(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800,
-                          color: _C.green,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 28),
-
-            // Boutons
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => Navigator.of(ctx).pop(),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: _C.green,
-                      side: const BorderSide(color: _C.border),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: const Text(
-                      'Annuler',
-                      style: TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () {
-                      Navigator.of(ctx).pop();
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => CheckoutPage(vendeurId: vendeurId),
-                        ),
-                      );
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _C.green,
-                      foregroundColor: _C.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: const Text(
-                      'Commander',
-                      style: TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => CheckoutPage(produitIds: {..._selection}),
       ),
     );
   }
@@ -245,12 +395,11 @@ class PanierPage extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Icône décorative
             Container(
               width: 64,
               height: 64,
               decoration: BoxDecoration(
-                color: const Color(0xFFFEF3E2),
+                color: _C.greenLight,
                 borderRadius: BorderRadius.circular(20),
               ),
               child: const Icon(
@@ -260,8 +409,6 @@ class PanierPage extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 24),
-
-            // Titre
             Text(
               'Connexion requise',
               style: GoogleFonts.sora(
@@ -272,67 +419,58 @@ class PanierPage extends StatelessWidget {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 12),
-
-            // Description
             Text(
               'Connectez-vous pour valider votre commande. Votre panier sera conservé.',
               style: GoogleFonts.dmSans(
                 fontSize: 15,
-                fontWeight: FontWeight.w400,
                 color: _C.sub,
                 height: 1.6,
               ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 32),
-
-            // Boutons
-            Column(
-              children: [
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.of(ctx).pop();
-                    Navigator.of(context).pushNamed(AppRouter.loginRoute);
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _C.green,
-                    foregroundColor: _C.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        'Se connecter',
-                        style: GoogleFonts.sora(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      const Icon(Icons.arrow_forward_rounded, size: 18),
-                    ],
-                  ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                Navigator.of(context).pushNamed(AppRouter.loginRoute);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _C.green,
+                foregroundColor: _C.white,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
                 ),
-                const SizedBox(height: 12),
-                TextButton(
-                  onPressed: () => Navigator.of(ctx).pop(),
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
-                  child: Text(
-                    'Plus tard',
-                    style: GoogleFonts.dmSans(
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    'Se connecter',
+                    style: GoogleFonts.sora(
                       fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: _C.sub,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
+                  const SizedBox(width: 8),
+                  const Icon(Icons.arrow_forward_rounded, size: 18),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 14),
+              ),
+              child: Text(
+                'Plus tard',
+                style: GoogleFonts.dmSans(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: _C.sub,
                 ),
-              ],
+              ),
             ),
           ],
         ),
@@ -345,8 +483,11 @@ class _QtyStepper extends StatelessWidget {
   final int quantite;
   final VoidCallback onMoins;
   final VoidCallback onPlus;
-  const _QtyStepper(
-      {required this.quantite, required this.onMoins, required this.onPlus});
+  const _QtyStepper({
+    required this.quantite,
+    required this.onMoins,
+    required this.onPlus,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -354,10 +495,14 @@ class _QtyStepper extends StatelessWidget {
       children: [
         _circle(Icons.remove, onMoins),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          child: Text('$quantite',
-              style: const TextStyle(
-                  fontWeight: FontWeight.w700, color: _C.black)),
+          padding: const EdgeInsets.symmetric(horizontal: 9),
+          child: Text(
+            '$quantite',
+            style: const TextStyle(
+              fontWeight: FontWeight.w700,
+              color: _C.black,
+            ),
+          ),
         ),
         _circle(Icons.add, onPlus),
       ],
@@ -365,163 +510,19 @@ class _QtyStepper extends StatelessWidget {
   }
 
   Widget _circle(IconData icon, VoidCallback onTap) => InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
-        child: Container(
-          width: 30,
-          height: 30,
-          decoration: BoxDecoration(
-            color: _C.bg,
-            shape: BoxShape.circle,
-            border: Border.all(color: _C.border),
-          ),
-          child: Icon(icon, size: 16, color: _C.black),
-        ),
-      );
-}
-
-/// Groupe d'articles d'une même boutique, avec sous-total et bouton
-/// « Commander » qui déclenche une commande **pour cette boutique uniquement**.
-class _BoutiqueGroupe extends StatelessWidget {
-  final String nomBoutique;
-  final List<PanierItem> items;
-  final double total;
-  final void Function(PanierItem) onMoins;
-  final void Function(PanierItem) onPlus;
-  final VoidCallback onCommander;
-
-  const _BoutiqueGroupe({
-    required this.nomBoutique,
-    required this.items,
-    required this.total,
-    required this.onMoins,
-    required this.onPlus,
-    required this.onCommander,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
+    onTap: onTap,
+    borderRadius: BorderRadius.circular(20),
+    child: Container(
+      width: 28,
+      height: 28,
       decoration: BoxDecoration(
-        color: _C.white,
-        borderRadius: BorderRadius.circular(18),
+        color: _C.bg,
+        shape: BoxShape.circle,
         border: Border.all(color: _C.border),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // En-tête boutique
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 14, 14, 8),
-            child: Row(
-              children: [
-                Container(
-                  width: 34,
-                  height: 34,
-                  decoration: BoxDecoration(
-                    color: _C.bg,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(Icons.storefront_rounded,
-                      size: 18, color: _C.green),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(nomBoutique,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w800, color: _C.black)),
-                ),
-                Text('${items.length} article${items.length > 1 ? 's' : ''}',
-                    style: const TextStyle(color: _C.sub, fontSize: 12)),
-              ],
-            ),
-          ),
-          const Divider(height: 1, color: _C.border),
-          // Articles de la boutique
-          ...items.map((item) => Padding(
-                padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-                child: Row(
-                  children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: item.image.isNotEmpty
-                          ? CachedNetworkImage(
-                              imageUrl: item.image,
-                              width: 56,
-                              height: 56,
-                              fit: BoxFit.cover,
-                              errorWidget: (_, __, ___) => const _ImgFallback(),
-                            )
-                          : const _ImgFallback(),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(item.nom,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.w700, color: _C.black)),
-                          const SizedBox(height: 4),
-                          Text('${item.prix.toStringAsFixed(0)} FCFA',
-                              style: const TextStyle(
-                                  color: _C.green, fontWeight: FontWeight.w700)),
-                        ],
-                      ),
-                    ),
-                    _QtyStepper(
-                      quantite: item.quantite,
-                      onMoins: () => onMoins(item),
-                      onPlus: () => onPlus(item),
-                    ),
-                  ],
-                ),
-              )),
-          const Divider(height: 1, color: _C.border),
-          // Sous-total + commander (par boutique)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('Sous-total',
-                          style: TextStyle(color: _C.sub, fontSize: 12)),
-                      Text('${total.toStringAsFixed(0)} FCFA',
-                          style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w800,
-                              color: _C.black)),
-                    ],
-                  ),
-                ),
-                ElevatedButton(
-                  onPressed: onCommander,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _C.green,
-                    foregroundColor: _C.white,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 22, vertical: 12),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                  ),
-                  child: const Text('Commander',
-                      style: TextStyle(fontWeight: FontWeight.w700)),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+      child: Icon(icon, size: 15, color: _C.black),
+    ),
+  );
 }
 
 class _PanierVide extends StatelessWidget {
@@ -534,8 +535,10 @@ class _PanierVide extends StatelessWidget {
         children: const [
           Icon(Icons.shopping_cart_outlined, size: 64, color: _C.sub),
           SizedBox(height: 12),
-          Text('Votre panier est vide',
-              style: TextStyle(color: _C.sub, fontSize: 16)),
+          Text(
+            'Votre panier est vide',
+            style: TextStyle(color: _C.sub, fontSize: 16),
+          ),
         ],
       ),
     );
@@ -546,9 +549,9 @@ class _ImgFallback extends StatelessWidget {
   const _ImgFallback();
   @override
   Widget build(BuildContext context) => Container(
-        width: 64,
-        height: 64,
-        color: _C.bg,
-        child: const Icon(Icons.image_not_supported_outlined, color: _C.sub),
-      );
+    width: 56,
+    height: 56,
+    color: _C.bg,
+    child: const Icon(Icons.image_not_supported_outlined, color: _C.sub),
+  );
 }

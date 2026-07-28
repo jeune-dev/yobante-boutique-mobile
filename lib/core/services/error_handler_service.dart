@@ -2,10 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import '../../injection_container.dart';
 import '../routes/app_router.dart';
+import '../utils/app_logger.dart';
 import 'token_service.dart';
 
-/// Service global de gestion des erreurs réseau
-/// Redirige automatiquement vers la connexion en cas d'erreur 401 ou 500
+/// Service global de gestion des erreurs réseau.
+///
+/// Une session invalide referme la session et **rouvre la boutique en
+/// visiteur** : l'application se consulte sans compte, renvoyer vers l'écran de
+/// connexion enfermerait l'utilisateur sur une page dont il n'a rien à faire.
+/// C'est aussi ce qui ramenait sur la connexion juste après une déconnexion —
+/// le premier appel protégé de l'accueil repartait en 401.
 class ErrorHandlerService {
   static final ErrorHandlerService _instance = ErrorHandlerService._internal();
 
@@ -25,75 +31,42 @@ class ErrorHandlerService {
   Future<void> handleError(DioException error) async {
     final statusCode = error.response?.statusCode;
 
-    // 401 : Token expiré ou invalide → redirige vers connexion
-    if (statusCode == 401) {
-      await _handleUnauthorized();
+    // 401 / 403 : la session ne vaut plus rien → on la referme.
+    if (statusCode == 401 || statusCode == 403) {
+      await _fermerSession();
       return;
     }
 
-    // 500 : Erreur serveur → redirige vers connexion (sécurité)
+    // 500 : panne serveur, pas un problème d'authentification. Déconnecter
+    // l'utilisateur et réinitialiser sa navigation pour une erreur passagère
+    // lui ferait perdre son écran sans raison : la page appelante affiche son
+    // propre état d'erreur et propose de réessayer.
     if (statusCode == 500) {
-      await _handleServerError();
-      return;
-    }
-
-    // Autres erreurs bizarre (4xx/5xx) → redirection
-    if (statusCode != null && statusCode >= 400) {
-      await _handleOtherError(statusCode);
+      logDebug('⚠️ Erreur serveur 500 : ${error.requestOptions.path}');
     }
   }
 
-  /// Gère les erreurs 401 (Unauthorized)
-  Future<void> _handleUnauthorized() async {
+  /// Efface la session et ramène l'utilisateur à l'accueil hors connexion.
+  ///
+  /// Sans jeton, il n'y a aucune session à refermer : un visiteur reçoit
+  /// naturellement des 401 sur les endpoints protégés (favoris, commandes…) et
+  /// doit pouvoir continuer à parcourir la boutique sans que sa navigation
+  /// soit réinitialisée.
+  Future<void> _fermerSession() async {
     try {
-      // Effacer le token et le user
       final tokenService = sl<TokenService>();
-      await tokenService.clearToken();
+      if (!await tokenService.isAuthenticated) return;
 
-      // Redirection vers la page de connexion
-      if (_navigatorState.mounted) {
-        _navigatorState.pushNamedAndRemoveUntil(
-          AppRouter.loginRoute,
-          (route) => false,
-        );
-      }
-    } catch (e) {
-      // Silencieusement échouer - le token est peut-être déjà effacé
-    }
-  }
-
-  /// Gère les erreurs 500 (Erreur serveur)
-  Future<void> _handleServerError() async {
-    try {
-      // Effacer le token et le user (sécurité)
-      final tokenService = sl<TokenService>();
-      await tokenService.clearToken();
-
-      // Redirection vers la page de connexion
-      if (_navigatorState.mounted) {
-        _navigatorState.pushNamedAndRemoveUntil(
-          AppRouter.loginRoute,
-          (route) => false,
-        );
-      }
-    } catch (e) {
-      // Silencieusement échouer
-    }
-  }
-
-  /// Gère les autres erreurs 4xx/5xx
-  Future<void> _handleOtherError(int statusCode) async {
-    // Pour les autres erreurs de sécurité (403, 404 si critique), effacer aussi
-    if (statusCode == 403) {
-      final tokenService = sl<TokenService>();
       await tokenService.clearToken();
 
       if (_navigatorState.mounted) {
         _navigatorState.pushNamedAndRemoveUntil(
-          AppRouter.loginRoute,
+          AppRouter.acheteurRoute,
           (route) => false,
         );
       }
+    } catch (_) {
+      // Silencieusement : le jeton est peut-être déjà effacé.
     }
   }
 }

@@ -18,6 +18,12 @@ abstract class CommandeRemoteDataSource {
   Future<PaiementModel> statutPaiement(String id);
 
   Future<List<AdresseModel>> adresses();
+
+  /// Enregistre une nouvelle adresse et la renvoie.
+  ///
+  /// La commande référence une adresse par identifiant : livrer « ailleurs »
+  /// suppose donc de créer l'adresse avant de commander.
+  Future<AdresseModel> creerAdresse(Map<String, dynamic> body);
 }
 
 class CommandeRemoteDataSourceImpl implements CommandeRemoteDataSource {
@@ -93,5 +99,12 @@ class CommandeRemoteDataSourceImpl implements CommandeRemoteDataSource {
     final brut = _contenu(res.data, 'adresses');
     if (brut is! List) return const [];
     return brut.map((e) => AdresseModel.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  @override
+  Future<AdresseModel> creerAdresse(Map<String, dynamic> body) async {
+    final res = await dio.post(CompteEndpoints.adresses, data: body);
+    final brut = _contenu(res.data, 'adresse');
+    return AdresseModel.fromJson(Map<String, dynamic>.from(brut as Map));
   }
 }

@@ -1,3 +1,5 @@
+import '../../../home/data/models/produit_model.dart';
+
 double _toDouble(dynamic v) {
   if (v == null) return 0;
   if (v is num) return v.toDouble();
@@ -23,6 +25,14 @@ class PromotionModel {
   /// Section d'accueil de rattachement.
   final String section;
 
+  /// Produit complet renvoyé par le backend avec la promotion.
+  ///
+  /// Indispensable pour commander : le panier a besoin du vendeur, que les
+  /// champs `produitNom` / `produitPrix` ne portaient pas. Nul si le backend
+  /// n'a pas joint le produit — la promotion reste alors consultable, sans
+  /// bouton d'achat.
+  final ProduitModel? produit;
+
   PromotionModel({
     required this.id,
     required this.titre,
@@ -37,6 +47,7 @@ class PromotionModel {
     this.produitImage,
     this.pourcentageReduction = 0,
     this.section = '',
+    this.produit,
   });
 
   /// Libellé d'affichage : le titre de la promotion, à défaut le nom du produit.
@@ -72,6 +83,7 @@ class PromotionModel {
       // Un `as num?` donnerait null et afficherait 0 % de remise.
       pourcentageReduction: _toDouble(json['pourcentageReduction']).round(),
       section: json['section']?.toString() ?? '',
+      produit: produit != null ? ProduitModel.fromJson(produit) : null,
     );
   }
 }

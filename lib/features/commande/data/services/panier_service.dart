@@ -98,34 +98,33 @@ class PanierService extends ChangeNotifier {
         .toList();
   }
 
-  // ── Groupement par boutique (multi-boutiques) ──────────────────────────────
+  // ── Sélection d'articles ───────────────────────────────────────────────────
+  //
+  // Le client coche ce qu'il veut commander maintenant : le reste attend dans
+  // le panier. Une commande porte donc sur un sous-ensemble d'articles, pas sur
+  // le panier entier.
 
-  /// Articles regroupés par vendeur (boutique). Clé = vendeurId.
-  Map<String, List<PanierItem>> get parVendeur {
-    final map = <String, List<PanierItem>>{};
-    for (final it in _items) {
-      map.putIfAbsent(it.vendeurId, () => <PanierItem>[]).add(it);
-    }
-    return map;
-  }
+  /// Articles dont le produit figure dans [produitIds].
+  List<PanierItem> selection(Set<String> produitIds) =>
+      _items.where((e) => produitIds.contains(e.produitId)).toList();
 
-  /// Nombre de boutiques distinctes présentes dans le panier.
-  int get nombreBoutiques => parVendeur.length;
+  /// Montant des seuls articles sélectionnés.
+  double totalSelection(Set<String> produitIds) =>
+      selection(produitIds).fold(0.0, (somme, e) => somme + e.sousTotal);
 
-  /// Total pour une boutique donnée.
-  double totalVendeur(String vendeurId) => _items
-      .where((e) => e.vendeurId == vendeurId)
-      .fold(0.0, (sum, e) => sum + e.sousTotal);
+  /// Nombre d'unités sélectionnées, toutes lignes confondues.
+  int nombreArticlesSelection(Set<String> produitIds) =>
+      selection(produitIds).fold(0, (somme, e) => somme + e.quantite);
 
-  /// Payload `items` de commande limité à une seule boutique.
-  List<Map<String, dynamic>> toApiItemsPour(String vendeurId) => _items
-      .where((e) => e.vendeurId == vendeurId)
-      .map((e) => {'produitId': e.produitId, 'quantite': e.quantite})
-      .toList();
+  /// Payload `items` limité à la sélection.
+  List<Map<String, dynamic>> toApiItemsSelection(Set<String> produitIds) =>
+      selection(produitIds)
+          .map((e) => {'produitId': e.produitId, 'quantite': e.quantite})
+          .toList();
 
-  /// Vide uniquement les articles d'une boutique (après sa commande).
-  Future<void> viderVendeur(String vendeurId) async {
-    _items.removeWhere((e) => e.vendeurId == vendeurId);
+  /// Retire les articles commandés, en laissant les autres dans le panier.
+  Future<void> retirerSelection(Set<String> produitIds) async {
+    _items.removeWhere((e) => produitIds.contains(e.produitId));
     await _sauvegarder();
   }
 }

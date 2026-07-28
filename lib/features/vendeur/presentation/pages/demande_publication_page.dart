@@ -4,6 +4,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 
 import '../../../../injection_container.dart';
 import '../../../home/data/models/produit_model.dart';
+import '../../../home/presentation/pages/acheteur/produit_detail_page.dart';
 import '../bloc/vendeur_produit_bloc.dart';
 import '../widgets/statut_chip.dart';
 import 'produit_form_page.dart';
@@ -39,6 +40,18 @@ class _DemandeVue extends StatelessWidget {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Demande renvoyée en validation')),
+    );
+  }
+
+  /// Fiche du produit telle que la voit le client, sans les suggestions.
+  void _apercu(BuildContext context, ProduitModel produit) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ProduitDetailPage(
+          produit: produit,
+          apercuVendeur: true,
+        ),
+      ),
     );
   }
 
@@ -174,10 +187,23 @@ class _DemandeVue extends StatelessWidget {
       ];
     }
     if (state is VendeurProduitLoaded) {
-      // Une demande n'a plus lieu d'être suivie une fois le produit publié.
-      final demandes = state.produits
-          .where((p) => p.statutValidation != 'valide')
-          .toList();
+      // Toutes les demandes, y compris celles qui ont abouti : le vendeur doit
+      // pouvoir retrouver ce qu'il a déjà soumis, et pas seulement ce qui est
+      // encore en instance. Les demandes en cours passent devant.
+      const rang = {
+        'rejete': 0,
+        'en_attente': 1,
+        'valide_step1': 2,
+        'valide': 3,
+      };
+      final demandes = [...state.produits]..sort((a, b) {
+          final ordre = (rang[a.statutValidation] ?? 1)
+              .compareTo(rang[b.statutValidation] ?? 1);
+          return ordre;
+        });
+
+      final enCours =
+          demandes.where((p) => p.statutValidation != 'valide').length;
 
       if (demandes.isEmpty) {
         return [
@@ -194,7 +220,7 @@ class _DemandeVue extends StatelessWidget {
                 Icon(Icons.inbox_rounded, color: VendeurCouleurs.gris, size: 30),
                 SizedBox(height: 8),
                 Text(
-                  'Aucune demande en cours',
+                  'Aucune demande envoyée pour le moment',
                   style: TextStyle(color: VendeurCouleurs.gris, fontSize: 13),
                 ),
               ],
@@ -204,16 +230,29 @@ class _DemandeVue extends StatelessWidget {
       }
 
       return [
+        // Repère de lecture : combien de dossiers attendent encore une décision.
+        Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Text(
+            enCours == 0
+                ? '${demandes.length} demande${demandes.length > 1 ? 's' : ''} — toutes traitées'
+                : '$enCours en cours sur ${demandes.length} demande${demandes.length > 1 ? 's' : ''}',
+            style: const TextStyle(fontSize: 12.5, color: VendeurCouleurs.gris),
+          ),
+        ),
         for (final demande in demandes)
           Padding(
             padding: const EdgeInsets.only(bottom: 12),
             child: _CarteDemande(
               produit: demande,
-              // Une demande rejetée doit pouvoir être corrigée : on rouvre le
-              // formulaire pré-rempli, et le renvoi la remet en attente.
+              // Rejetée : on rouvre le formulaire pré-rempli, le renvoi la
+              // remet en attente. Publiée : on montre la fiche telle que le
+              // client la voit, plutôt qu'une carte qui ne réagit pas.
               onModifier: demande.statutValidation == 'rejete'
                   ? () => _corriger(context, demande)
-                  : null,
+                  : demande.statutValidation == 'valide'
+                      ? () => _apercu(context, demande)
+                      : null,
             ),
           ),
       ];
